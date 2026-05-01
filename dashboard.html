@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OVLP · ASSESS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #12131f;
+  --panel:    #191a28;
+  --card:     #1e2032;
+  --card-h:   #252740;
+
+  --text:     #f0f2ff;
+  --text-2:   #c8cde8;
+  --muted:    #8890b8;
+  --subtle:   #7880a8;
+
+  --accent:   #7c7bff;
+  --accent-d: #5e6ad2;
+  --accent-glow: rgba(124,123,255,0.25);
+
+  --green:    #23d160;
+  --green-glow: rgba(35,209,96,0.22);
+  --red:      #ff4757;
+  --red-glow: rgba(255,71,87,0.22);
+  --yellow:   #ffb300;
+  --yellow-glow: rgba(255,179,0,0.22);
+  --purple:   #b59eff;
+
+  --border:   rgba(255,255,255,0.10);
+  --border-b: rgba(255,255,255,0.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: 'cv01','ss03';
+  -webkit-font-smoothing: antialiased;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ SPINNER ═══ */
+.spin {
+  display: inline-block;
+  width: 11px; height: 11px;
+  border: 2px solid rgba(255,255,255,0.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sp .75s linear infinite;
+  vertical-align: middle;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
+.pulse { animation: pulse 2.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes popIn { from { opacity:0; transform:scale(.94) translateY(4px); } to { opacity:1; transform:none; } }
+.pop { animation: popIn .35s cubic-bezier(.34,1.56,.64,1) forwards; }
+
+/* ═══════════════════════════════
+   TOPBAR
+═══════════════════════════════ */
+#topbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px;
+  background: rgba(12,13,20,0.95);
+  border-bottom: 1px solid var(--border-b);
+  flex-shrink: 0;
+  backdrop-filter: blur(20px);
+}
+
+.logo {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #9b9bff 0%, #7c7bff 55%, #5a6bd4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.status-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 11px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--subtle);
+  transition: all .4s;
+}
+.dot.on {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(35,209,96,.18), 0 0 10px rgba(35,209,96,.5);
+}
+#status-text { font-size: 11px; color: var(--muted); font-weight: 500; }
+#api-count   { margin-left: auto; font-size: 11px; color: var(--subtle); }
+#clock       { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: .03em; }
+
+/* ═══════════════════════════════
+   HEADER (call active)
+═══════════════════════════════ */
+#header {
+  display: none;
+  align-items: stretch;
+  height: 72px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* gradient line */
+#header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-d) 30%, var(--green) 70%, transparent 100%);
+  opacity: 0.6;
+}
+
+/* OWNER block */
+#h-owner-block {
+  flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 22px;
+  border-right: 1px solid var(--border-b);
+  min-width: 0;
+}
+.h-owner-name {
+  font-size: 20px; font-weight: 800;
+  letter-spacing: -.4px; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.h-owner-addr {
+  font-size: 11px; color: var(--muted); margin-top: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.h-parcel { font-size: 10px; color: var(--subtle); margin-top: 3px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+
+/* PRIORITY block */
+#h-priority-block {
+  width: 120px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-right: 1px solid var(--border-b);
+  gap: 6px;
+}
+#priority-tag {
+  font-size: 11px; font-weight: 800;
+  padding: 4px 14px; border-radius: 999px;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.t1 { background:rgba(255,71,87,.14); color:#ff6b7a; border:1px solid rgba(255,71,87,.35); box-shadow:0 0 14px rgba(255,71,87,.12); }
+.t2 { background:rgba(255,179,0,.14); color:#ffc947; border:1px solid rgba(255,179,0,.35); box-shadow:0 0 14px rgba(255,179,0,.12); }
+.t3 { background:rgba(35,209,96,.14); color:#2ddb6b; border:1px solid rgba(35,209,96,.35); box-shadow:0 0 14px rgba(35,209,96,.12); }
+
+/* SCORE block */
+#h-score-block {
+  width: 110px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-right: 1px solid var(--border-b);
+  position: relative;
+}
+#score-ring-wrap { position: relative; width: 58px; height: 58px; }
+#score-svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+#score-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#score-num { font-size: 19px; font-weight: 900; line-height: 1; letter-spacing: -.5px; }
+#score-lbl { font-size: 8px; color: var(--subtle); text-transform: uppercase; letter-spacing: .1em; font-weight: 700; margin-top: 1px; }
+.sc-green  { color: var(--green);  text-shadow: 0 0 16px var(--green-glow); }
+.sc-yellow { color: var(--yellow); text-shadow: 0 0 16px var(--yellow-glow); }
+.sc-red    { color: var(--red);    text-shadow: 0 0 16px var(--red-glow); }
+.sc-grey   { color: var(--muted); }
+
+/* OFFER block */
+#h-offer-block {
+  width: 200px;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 20px;
+  text-align: right;
+}
+#offer-range { font-size: 20px; font-weight: 900; letter-spacing: -.4px; line-height: 1; }
+#offer-lbl   { font-size: 9px; color: var(--subtle); text-transform: uppercase; letter-spacing: .1em; font-weight: 700; margin-top: 5px; }
+#mao-lbl     { font-size: 12px; color: var(--yellow); font-weight: 700; margin-top: 4px; }
+
+/* DQ */
+#autodq {
+  display: none;
+  background: rgba(255,71,87,.08);
+  border-bottom: 1px solid rgba(255,71,87,.22);
+  padding: 7px 22px;
+  color: var(--red);
+  font-weight: 700; font-size: 12px; letter-spacing: .03em;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════ */
+#main {
+  flex: 1;
+  display: none;
+  grid-template-columns: 1fr 300px;
+  overflow: hidden;
+}
+#left  { display: flex; flex-direction: column; border-right: 1px solid var(--border-b); overflow: hidden; }
+#right { display: flex; flex-direction: column; overflow: hidden; background: rgba(8,8,12,0.6); }
+
+/* ═══════════════════════════════
+   ASSESS GRID  — 3 columns, taller cards
+═══════════════════════════════ */
+#assess-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.035);
+  flex-shrink: 0;
+}
+
+.ag {
+  background: var(--card);
+  padding: 12px 14px 10px;
+  min-height: 78px;
+  position: relative;
+  overflow: hidden;
+  transition: background .25s;
+  cursor: default;
+}
+.ag:hover { background: var(--card-h); }
+
+/* glow bar top */
+.ag::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: var(--subtle);
+  transition: background .4s, box-shadow .4s;
+}
+.ag.green::before  { background: var(--green);  box-shadow: 0 0 12px var(--green-glow),  0 0 24px var(--green-glow); }
+.ag.yellow::before { background: var(--yellow); box-shadow: 0 0 12px var(--yellow-glow), 0 0 24px var(--yellow-glow); }
+.ag.red::before    { background: var(--red);    box-shadow: 0 0 12px var(--red-glow),    0 0 24px var(--red-glow); }
+.ag.checking::before { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); animation: barPulse 1.5s ease-in-out infinite; }
+@keyframes barPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+/* status bg tint */
+.ag.green  { background: linear-gradient(160deg, rgba(35,209,96,.08) 0%, var(--card) 50%); }
+.ag.red    { background: linear-gradient(160deg, rgba(255,71,87,.09) 0%, var(--card) 50%); }
+.ag.yellow { background: linear-gradient(160deg, rgba(255,179,0,.07) 0%, var(--card) 50%); }
+.ag.checking { background: linear-gradient(160deg, rgba(124,123,255,.06) 0%, var(--card) 50%); }
+
+.ag-top  { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.ag-icon { font-size: 16px; line-height: 1; }
+.ag-lbl  { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.ag-flag { font-size: 14px; font-weight: 800; line-height: 1.1; color: var(--text-2); letter-spacing: -.1px; }
+.ag-sub  { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+
+.ag.green  .ag-flag { color: var(--green); }
+.ag.red    .ag-flag { color: var(--red); }
+.ag.yellow .ag-flag { color: var(--yellow); }
+.ag.checking .ag-flag { color: var(--accent); }
+
+/* ═══════════════════════════════
+   FINANCIALS
+═══════════════════════════════ */
+#fin-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.035);
+  flex-shrink: 0;
+}
+.fc { background: rgba(18,19,31,0.97); padding: 9px 13px; }
+.fc-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.fc-val { font-size: 16px; font-weight: 800; margin-top: 4px; color: var(--accent); letter-spacing: -.3px; }
+.fc-val.red    { color: var(--red); }
+.fc-val.yellow { color: var(--yellow); }
+.fc-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+/* ═══════════════════════════════
+   CONTEXT STRIP
+═══════════════════════════════ */
+#context-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.035);
+  flex-shrink: 0;
+}
+.ctx { background: rgba(20,21,35,0.9); padding: 9px 13px; display: flex; align-items: center; gap: 11px; }
+.ctx-icon { font-size: 18px; }
+.ctx-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.ctx-val { font-size: 15px; font-weight: 800; margin-top: 4px; letter-spacing: -.2px; }
+.ctx-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* ═══════════════════════════════
+   COMPS
+═══════════════════════════════ */
+#comps-wrap { flex: 1; overflow-y: auto; padding: 13px 16px; }
+.sec-title {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted); font-weight: 800;
+  margin-bottom: 9px; padding-bottom: 7px;
+  border-bottom: 1px solid var(--border-b);
+}
+table.comps { width: 100%; border-collapse: collapse; }
+table.comps th {
+  text-align: left; font-size: 9px;
+  text-transform: uppercase; letter-spacing: .09em;
+  color: var(--muted); font-weight: 700;
+  padding: 4px 7px; border-bottom: 1px solid var(--border-b);
+}
+table.comps td {
+  padding: 7px 7px; font-size: 12px; color: var(--text-2);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+table.comps tr:last-child td { border-bottom: none; }
+table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
+.c-price { font-weight: 800; color: var(--accent); font-size: 13px; }
+.c-acre  { color: var(--green); font-weight: 700; }
+.c-date  { color: var(--muted); }
+
+/* ═══════════════════════════════
+   RIGHT PANEL
+═══════════════════════════════ */
+#prop-panel {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-b);
+  flex-shrink: 0;
+}
+.prop-addr { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: -.15px; margin-bottom: 9px; line-height: 1.3; }
+.pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pi-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.pi-val { font-size: 12px; font-weight: 600; margin-top: 3px; color: var(--text-2); }
+
+#zoning-panel {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-b);
+  border-left: 3px solid var(--accent-d);
+  background: rgba(94,106,210,.05);
+  flex-shrink: 0;
+}
+.zone-code {
+  font-size: 20px; font-weight: 900; letter-spacing: -.4px;
+  background: linear-gradient(90deg, #a0a8ff, #7c7bff);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.zone-desc   { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.zone-source { font-size: 9px; color: var(--subtle); margin-top: 3px; font-style: italic; }
+
+#flags-row {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-b);
+  display: flex; gap: 6px; flex-wrap: wrap;
+  flex-shrink: 0; min-height: 36px; align-items: center;
+}
+.pill {
+  font-size: 10px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px;
+  letter-spacing: .05em; text-transform: uppercase; border: 1px solid;
+}
+.pill.red    { background:rgba(255,71,87,.12); color:#ff7b88; border-color:rgba(255,71,87,.35); box-shadow:0 0 10px rgba(255,71,87,.1); }
+.pill.yellow { background:rgba(255,179,0,.12); color:#ffd047; border-color:rgba(255,179,0,.35); box-shadow:0 0 10px rgba(255,179,0,.1); }
+
+#epa-panel {
+  display: none; padding: 9px 14px;
+  border-bottom: 1px solid var(--border-b);
+  border-left: 3px solid var(--red);
+  background: rgba(255,71,87,.04);
+  flex-shrink: 0;
+}
+.epa-list { list-style: none; margin-top: 5px; }
+.epa-list li { font-size: 10px; color: var(--muted); padding: 2px 0; }
+.epa-list li::before { content: "⚠ "; color: var(--red); }
+
+#escalations { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.esc-item {
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 11px; margin-bottom: 7px;
+  transition: border-color .2s, background .2s;
+}
+.esc-item:hover { background: rgba(255,255,255,.04); border-color: rgba(124,123,255,.25); }
+.esc-office { font-size: 11px; font-weight: 700; color: var(--yellow); }
+.esc-when   { font-size: 10px; color: var(--subtle); margin: 3px 0; }
+.esc-ask    { font-size: 11px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+
+/* ═══════════════════════════════
+   LINKS BAR
+═══════════════════════════════ */
+#links-bar {
+  display: none;
+  flex-wrap: wrap; gap: 6px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border-b);
+  background: rgba(10,11,18,0.95);
+  flex-shrink: 0; align-items: center;
+  backdrop-filter: blur(20px);
+}
+.lb {
+  padding: 6px 14px; border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  color: var(--text-2); font-size: 11px; font-weight: 600;
+  text-decoration: none; white-space: nowrap;
+  font-feature-settings:'cv01','ss03';
+  transition: all .15s; letter-spacing: .01em;
+}
+.lb:hover { background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.14); color:var(--text); transform:translateY(-1px); }
+.lb.primary {
+  background: rgba(94,106,210,.2); border-color: rgba(124,123,255,.45); color: #b0b4ff;
+}
+.lb.primary:hover {
+  background:rgba(94,106,210,.32); border-color:var(--accent); color:#fff;
+  box-shadow: 0 0 20px rgba(124,123,255,.2);
+}
+#updated { margin-left: auto; font-size: 10px; color: var(--subtle); }
+
+/* ═══════════════════════════════
+   WAITING SCREEN
+═══════════════════════════════ */
+#waiting {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; z-index: 100;
+  background-image:
+    radial-gradient(ellipse 65% 45% at 50% 5%, rgba(94,106,210,.15) 0%, transparent 65%),
+    radial-gradient(ellipse 45% 35% at 50% 100%, rgba(124,123,255,.08) 0%, transparent 65%);
+}
+#waiting.hidden { display: none; }
+
+.w-monogram {
+  font-size: 80px; font-weight: 900; letter-spacing: -5px; line-height: 1;
+  background: linear-gradient(135deg, #4a52c8 0%, #7c7bff 40%, #b0b4ff 70%, #7c7bff 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 0 40px rgba(124,123,255,.5));
+  animation: float 5s ease-in-out infinite;
+}
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+#w-agent-badge { font-size: 12px; font-weight: 800; color: var(--purple); letter-spacing: .22em; text-transform: uppercase; min-height: 20px; }
+.w-sub { font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: .01em; }
+.w-caption { font-size: 12px; color: var(--subtle); }
+
+#w-no-agent {
+  margin-top: 22px; padding: 22px 32px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--border);
+  border-radius: 14px; text-align: center;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 0 60px rgba(124,123,255,.07);
+}
+.w-pick-label { color: var(--muted); font-size: 12px; font-weight: 500; margin-bottom: 14px; }
+.agent-btn-row { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+.agent-btn {
+  padding: 8px 22px; background: rgba(255,255,255,.04);
+  border: 1px solid var(--border); color: var(--text-2);
+  border-radius: 8px; cursor: pointer;
+  font-weight: 700; font-size: 13px;
+  font-family: 'Inter', sans-serif; font-feature-settings:'cv01','ss03';
+  transition: all .15s; letter-spacing: .04em;
+}
+.agent-btn:hover {
+  background: rgba(124,123,255,.15); border-color:rgba(124,123,255,.5);
+  color: #c8cbff; transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124,123,255,.15);
+}
+.test-btn {
+  display: inline-block; color: var(--accent);
+  font-size: 12px; font-weight: 700;
+  text-decoration: none; padding: 8px 18px;
+  border: 1px solid rgba(124,123,255,.35);
+  border-radius: 8px;
+  background: rgba(124,123,255,.08);
+  font-family: 'Inter', sans-serif; font-feature-settings:'cv01','ss03';
+  transition: all .15s; letter-spacing: .04em;
+}
+.test-btn:hover {
+  background: rgba(124,123,255,.18); border-color: var(--accent);
+  box-shadow: 0 0 24px rgba(124,123,255,.2); transform: translateY(-1px);
+}
+.w-meta { color: var(--subtle); font-size: 11px; }
+
+/* ═══════════════════════════════
+   OFFLINE BANNER
+═══════════════════════════════ */
+#offline-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 200;
+  background: rgba(255,71,87,0.95);
+  backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 20px;
+  opacity: 0;
+  transition: opacity 0.4s;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+#offline-banner.visible { opacity: 1; }
+.ob-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: white;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.ob-text { font-size: 12px; font-weight: 700; color: white; letter-spacing: .06em; }
+.ob-sub  { font-size: 11px; color: rgba(255,255,255,0.8); }
+.ob-reload {
+  margin-left: 10px; padding: 4px 14px;
+  background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 6px; color: white; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: background .15s;
+}
+.ob-reload:hover { background: rgba(255,255,255,0.35); }
+
+/* scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.06) transparent; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 2px; }
+
+/* ═══════════════════════════════
+   HOT ROD LOAD GAUGE — ghost HUD
+═══════════════════════════════ */
+#load-gauge {
+  position: fixed;
+  bottom: 52px;           /* float above the links bar */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  background: rgba(14,15,24,0.55);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255,100,0,0.22);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04) inset,
+    0 4px 32px rgba(0,0,0,0.5),
+    0 0 40px rgba(255,100,0,0.08);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 24px 10px;
+  gap: 4px;
+  min-width: 260px;
+  pointer-events: none;   /* dashboard stays fully clickable beneath */
+}
+#gauge-svg { width: 240px; overflow: visible; }
+#g-arc    { transition: stroke-dashoffset 0.45s cubic-bezier(0.4,0,0.2,1); }
+#g-needle { transition: transform 0.45s cubic-bezier(0.4,0,0.2,1); }
+#g-count  { font-size: 10px; color: var(--muted); font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+#g-pct    { transition: fill 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- OFFLINE BANNER — appears after 8s of no SSE connection, auto-dismisses on reconnect -->
+<div id="offline-banner">
+  <span class="ob-dot"></span>
+  <span class="ob-text">SERVER OFFLINE</span>
+  <span class="ob-sub">Pinging every 3s — will auto-reload when back</span>
+  <button class="ob-reload" onclick="window.location.reload()">Reload Now</button>
+</div>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="logo">OVLP · ASSESS <span style="font-size:10px;font-weight:600;color:#7c7bff;letter-spacing:.12em;opacity:.7;vertical-align:middle;margin-left:6px">v2.0</span></div>
+  <div class="status-pill">
+    <span class="dot" id="dot"></span>
+    <span id="status-text">Connecting...</span>
+  </div>
+  <div id="api-count">13 free APIs</div>
+  <div id="clock">--:--:--</div>
+</div>
+
+<!-- HEADER -->
+<div id="header" style="display:none">
+  <div id="h-owner-block">
+    <div class="h-owner-name" id="h-owner">—</div>
+    <div class="h-owner-addr" id="h-addr">—</div>
+    <div class="h-parcel" id="h-parcel">—</div>
+  </div>
+  <div id="h-priority-block">
+    <div id="priority-tag" class="t2">—</div>
+  </div>
+  <div id="h-score-block">
+    <div id="score-ring-wrap">
+      <svg id="score-svg" width="58" height="58" viewBox="0 0 58 58">
+        <circle cx="29" cy="29" r="23" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+        <circle id="score-ring" cx="29" cy="29" r="23" fill="none"
+                stroke="#7c7bff" stroke-width="5"
+                stroke-dasharray="144.5" stroke-dashoffset="144.5"
+                stroke-linecap="round" style="transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1),stroke .4s"/>
+      </svg>
+      <div id="score-center">
+        <div id="score-num" class="sc-grey"><span class="spin"></span></div>
+        <div id="score-lbl">SCORE</div>
+      </div>
+    </div>
+  </div>
+  <div id="h-offer-block">
+    <div id="offer-range" class="sc-green"><span class="spin"></span></div>
+    <div id="offer-lbl">Wholesale Range</div>
+    <div id="mao-lbl"></div>
+  </div>
+</div>
+
+<div id="autodq">⛔ AUTO-DISQUALIFY — <span id="dq-reason"></span></div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="left">
+
+    <!-- 3-COL ASSESS GRID -->
+    <div id="assess-grid">
+      <div class="ag checking" id="ag-flood">
+        <div class="ag-top"><div class="ag-icon">🌊</div><div class="ag-lbl">Flood Zone</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-soil">
+        <div class="ag-top"><div class="ag-icon">🌱</div><div class="ag-lbl">Soil / Septic</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-zoning">
+        <div class="ag-top"><div class="ag-icon">📋</div><div class="ag-lbl">Zoning</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-access">
+        <div class="ag-top"><div class="ag-icon">🛣️</div><div class="ag-lbl">Road Access</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-wetlands">
+        <div class="ag-top"><div class="ag-icon">🌿</div><div class="ag-lbl">Wetlands</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-slope">
+        <div class="ag-top"><div class="ag-icon">⛰️</div><div class="ag-lbl">Slope</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-epa">
+        <div class="ag-top"><div class="ag-icon">🏭</div><div class="ag-lbl">EPA / CAFO</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-superfund">
+        <div class="ag-top"><div class="ag-icon">☣️</div><div class="ag-lbl">Superfund</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-streams">
+        <div class="ag-top"><div class="ag-icon">💧</div><div class="ag-lbl">Streams</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-power">
+        <div class="ag-top"><div class="ag-icon">⚡</div><div class="ag-lbl">Power Lines</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-dams">
+        <div class="ag-top"><div class="ag-icon">🏗️</div><div class="ag-lbl">Dams</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+      <div class="ag checking" id="ag-drive">
+        <div class="ag-top"><div class="ag-icon">🚗</div><div class="ag-lbl">Drive Time</div></div>
+        <div class="ag-flag">—</div><div class="ag-sub"></div>
+      </div>
+    </div>
+
+    <!-- FINANCIALS -->
+    <div id="fin-row">
+      <div class="fc"><div class="fc-lbl">Market Value</div><div class="fc-val" id="f-mkt">—</div></div>
+      <div class="fc"><div class="fc-lbl">CMA Value</div><div class="fc-val" id="f-cma">—</div></div>
+      <div class="fc"><div class="fc-lbl">CMA Range</div><div class="fc-val" style="font-size:13px" id="f-range">—</div></div>
+      <div class="fc"><div class="fc-lbl">Tax Delinquent</div><div class="fc-val red" id="f-tax">—</div><div class="fc-sub" id="f-taxyr"></div></div>
+      <div class="fc"><div class="fc-lbl">Total Owed</div><div class="fc-val yellow" id="f-owed">—</div><div class="fc-sub" id="f-annual"></div></div>
+    </div>
+
+    <!-- CONTEXT -->
+    <div id="context-row">
+      <div class="ctx">
+        <div class="ctx-icon">📊</div>
+        <div>
+          <div class="ctx-lbl">ZIP Vacancy</div>
+          <div class="ctx-val" id="ctx-vac"><span class="spin"></span></div>
+          <div class="ctx-sub" id="ctx-income">Census ACS...</div>
+        </div>
+      </div>
+      <div class="ctx">
+        <div class="ctx-icon">🚗</div>
+        <div>
+          <div class="ctx-lbl">Columbus Downtown</div>
+          <div class="ctx-val" id="ctx-drive"><span class="spin"></span></div>
+          <div class="ctx-sub" id="ctx-walmart">OSRM...</div>
+        </div>
+      </div>
+      <div class="ctx">
+        <div class="ctx-icon">📍</div>
+        <div>
+          <div class="ctx-lbl">Elevation / Slope</div>
+          <div class="ctx-val" id="ctx-elev"><span class="spin"></span></div>
+          <div class="ctx-sub" id="ctx-slope">USGS 3DEP...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPS -->
+    <div id="comps-wrap">
+      <div class="sec-title">Comparable Sales</div>
+      <table class="comps">
+        <thead><tr><th>#</th><th>Address</th><th>Acres</th><th>Date</th><th>Price</th><th>$/Acre</th><th>Maps</th></tr></thead>
+        <tbody id="comps-body">
+          <tr><td colspan="6" style="color:var(--subtle);text-align:center;padding:16px">Waiting for call...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /left -->
+
+  <div id="right">
+    <div id="prop-panel">
+      <div class="sec-title">Property</div>
+      <div class="prop-addr" id="r-addr">—</div>
+      <div class="pgrid">
+        <div><div class="pi-lbl">Acreage</div><div class="pi-val" id="r-acres">—</div></div>
+        <div><div class="pi-lbl">ZIP Code</div><div class="pi-val" id="r-zip">—</div></div>
+        <div><div class="pi-lbl">Land Use</div><div class="pi-val" id="r-use">—</div></div>
+        <div><div class="pi-lbl">Agent</div><div class="pi-val" id="r-agent" style="color:var(--purple)">—</div></div>
+      </div>
+    </div>
+
+    <div id="zoning-panel">
+      <div class="sec-title">Zoning <span style="color:var(--green);margin-left:5px">FREE · County GIS</span></div>
+      <div class="zone-code" id="z-code"><span class="spin"></span></div>
+      <div class="zone-desc" id="z-desc">Loading from Franklin County / Columbus GIS...</div>
+      <div class="zone-source" id="z-source"></div>
+    </div>
+
+    <div id="flags-row"></div>
+
+    <div id="epa-panel">
+      <div class="sec-title" style="color:var(--red)">⚠ EPA Within 1 Mile</div>
+      <ul class="epa-list" id="epa-list"></ul>
+    </div>
+
+    <div id="escalations">
+      <div class="sec-title">County Escalations</div>
+      <div id="esc-body" style="color:var(--subtle);font-size:11px">Generating after enrichment...</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- LINKS BAR -->
+<div id="links-bar">
+  <a class="lb" id="btn-maps"      href="#" target="_blank">Google Maps</a>
+  <a class="lb" id="btn-street"    href="#" target="_blank">Street View</a>
+  <a class="lb" id="btn-owner"     href="#" target="_blank">Search Owner</a>
+  <a class="lb" id="btn-zillow"    href="#" target="_blank">Zillow</a>
+  <a class="lb" id="btn-landwatch" href="#" target="_blank">LandWatch</a>
+  <a class="lb" id="btn-ghl"       href="https://app.gohighlevel.com/" target="_blank">GHL</a>
+  <span id="updated"></span>
+</div>
+
+<!-- WAITING -->
+<div id="waiting">
+  <div class="w-monogram">OVLP</div>
+  <div id="w-agent-badge"></div>
+  <div class="w-sub pulse">Waiting for call...</div>
+  <div class="w-caption">Screen pop fires when GHL call connects</div>
+
+  <div id="w-no-agent" style="display:none">
+    <div class="w-pick-label">Who are you? <span style="color:var(--subtle)">(saved permanently)</span></div>
+    <div class="agent-btn-row">
+      <button class="agent-btn" onclick="pickAgent('richard')">Richard</button>
+      <button class="agent-btn" onclick="pickAgent('oj')">OJ</button>
+      <button class="agent-btn" onclick="pickAgent('kehlen')">Kehlen</button>
+      <button class="agent-btn" onclick="pickAgent('lucia')">Lucia</button>
+    </div>
+  </div>
+
+  <div style="margin-top:22px;display:flex;gap:18px;align-items:center">
+    <a href="#" class="test-btn"
+       onclick="fetch('/webhook/test?agent='+AGENT_SLUG,{method:'POST'});return false;">
+      ▶ Fire Test Call
+    </a>
+    <span class="w-meta">13 APIs · All Free · No Keys</span>
+  </div>
+</div>
+
+<!-- HOT ROD LOAD GAUGE — appears while APIs are loading after call pop -->
+<div id="load-gauge">
+  <svg id="gauge-svg" viewBox="0 0 300 108" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%"   stop-color="#00cfff"/>
+        <stop offset="45%"  stop-color="#ffcc00"/>
+        <stop offset="75%"  stop-color="#ff6600"/>
+        <stop offset="100%" stop-color="#ff1a1a"/>
+      </linearGradient>
+      <filter id="arcGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="3.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="needleGlow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <!-- Track arc -->
+    <path d="M 70 100 A 80 80 0 0 0 230 100" fill="none"
+          stroke="rgba(255,255,255,0.06)" stroke-width="9" stroke-linecap="round"/>
+    <!-- Active fill arc — dashoffset animated via JS + CSS transition -->
+    <path id="g-arc" d="M 70 100 A 80 80 0 0 0 230 100" fill="none"
+          stroke="url(#gaugeGrad)" stroke-width="9" stroke-linecap="round"
+          stroke-dasharray="251.3" stroke-dashoffset="251.3"
+          filter="url(#arcGlow)"/>
+    <!-- Tick marks at 0 / 25 / 50 / 75 / 100% -->
+    <line x1="64"   y1="100"  x2="76"   y2="100"  stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <line x1="89.2" y1="39.2" x2="97.7" y2="47.7" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <line x1="150"  y1="14"   x2="150"  y2="26"   stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <line x1="210.8"y1="39.2" x2="202.3"y2="47.7" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <line x1="236"  y1="100"  x2="224"  y2="100"  stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <!-- Needle — rotates via CSS transform (origin at pivot 150,100) -->
+    <line id="g-needle" x1="150" y1="100" x2="75" y2="100"
+          stroke="#ff4500" stroke-width="2.5" stroke-linecap="round"
+          filter="url(#needleGlow)"
+          style="transform-origin:150px 100px; transform:rotate(0deg)"/>
+    <!-- Pivot chrome dot -->
+    <circle cx="150" cy="100" r="7"   fill="#1a1b2e" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+    <circle cx="150" cy="100" r="3"   fill="#ff4500"/>
+    <!-- Percentage value -->
+    <text id="g-pct" x="150" y="69" text-anchor="middle"
+          font-family="Inter,-apple-system,sans-serif" font-size="26" font-weight="900"
+          letter-spacing="-1" fill="white">0%</text>
+    <!-- Sub label -->
+    <text id="g-sub" x="150" y="84" text-anchor="middle" fill="rgba(255,140,0,0.85)"
+          font-family="Inter,-apple-system,sans-serif" font-size="7.5" font-weight="800" letter-spacing="3.5">LOADING DATA</text>
+    <!-- Edge labels -->
+    <text x="62"  y="107" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Inter,sans-serif">0</text>
+    <text x="238" y="107" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Inter,sans-serif">100</text>
+  </svg>
+  <div id="g-count">0 / 16 APIs loaded</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>{try{return'$'+Number(String(n).replace(/[,$]/g,'')).toLocaleString();}catch{return'—'}};
+const fmtA=n=>n?Number(n).toFixed(3)+' ac':'—';
+
+setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
+
+function animateRing(score){
+  const ring=$('score-ring');
+  const circ=144.5;
+  ring.style.strokeDashoffset=circ*(1-Math.min(Math.max(score,0),100)/100);
+  ring.style.stroke=score>=70?'#23d160':score>=40?'#ffb300':'#ff4757';
+}
+
+function setAG(id,cls,flag,sub){
+  const el=$(id);
+  el.className='ag '+cls+' pop';
+  el.querySelector('.ag-flag').innerHTML=flag;
+  el.querySelector('.ag-sub').textContent=sub||'';
+}
+
+let _agentRaw = new URLSearchParams(window.location.search).get('agent')||'';
+if(!_agentRaw) _agentRaw=localStorage.getItem('ovlp_agent')||'';
+if(_agentRaw) localStorage.setItem('ovlp_agent',_agentRaw);
+const AGENT_PARAM=_agentRaw;
+const AGENT_SLUG=_agentRaw.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'broadcast';
+
+(function(){
+  if(AGENT_PARAM){ $('w-agent-badge').textContent=AGENT_PARAM.toUpperCase(); $('w-no-agent').style.display='none'; }
+  else           { $('w-no-agent').style.display='block'; }
+})();
+
+function pickAgent(slug){ localStorage.setItem('ovlp_agent',slug); window.location.href='/?agent='+slug; }
+
+/* ── SERVER OFFLINE RECOVERY ───────────────────────────────
+   When SSE has been dead >8s we show an overlay and start
+   pinging /ping every 3s. When the server comes back we
+   auto-reload — no manual refresh needed.
+─────────────────────────────────────────────────────────── */
+let _offlineTimer = null;
+let _pingInterval = null;
+let _offlineVisible = false;
+
+function _showOffline() {
+  if (_offlineVisible) return;
+  _offlineVisible = true;
+  const el = $('offline-banner');
+  el.style.display = 'flex';
+  requestAnimationFrame(() => el.classList.add('visible'));
+  // Start pinging every 3s; reload page when server responds
+  _pingInterval = setInterval(() => {
+    fetch('/ping', {cache:'no-store'})
+      .then(r => { if (r.ok) { clearInterval(_pingInterval); window.location.reload(); } })
+      .catch(() => {});
+  }, 3000);
+}
+
+function _hideOffline() {
+  if (!_offlineVisible) return;
+  _offlineVisible = false;
+  clearInterval(_pingInterval);
+  const el = $('offline-banner');
+  el.classList.remove('visible');
+  setTimeout(() => { el.style.display='none'; }, 400);
+}
+
+let _es=null, _reconnectDelay=2000;
+function connect(){
+  if(_es){try{_es.close();}catch(e){}}
+  _es=new EventSource('/stream?agent='+AGENT_SLUG);
+  _es.onopen=()=>{
+    _reconnectDelay=2000;
+    clearTimeout(_offlineTimer);
+    _hideOffline();
+    $('dot').className='dot on';
+    $('status-text').textContent=(AGENT_PARAM?AGENT_PARAM+' — ':'')+'waiting for call';
+  };
+  _es.onerror=()=>{
+    $('dot').className='dot';
+    $('status-text').textContent='Reconnecting in '+Math.round(_reconnectDelay/1000)+'s...';
+    try{_es.close();}catch(e){}
+    // Show offline banner after 8s of no connection
+    clearTimeout(_offlineTimer);
+    _offlineTimer = setTimeout(_showOffline, 8000);
+    setTimeout(connect, _reconnectDelay);
+    _reconnectDelay=Math.min(_reconnectDelay*1.5, 30000);
+  };
+  _es.onmessage=e=>{
+    try{
+      const msg=JSON.parse(e.data);
+      if(msg.type==='contact_ready') renderContact(msg.data);
+      else if(msg.type==='enrich_update') applyUpdate(msg.key,msg.data);
+      else if(msg.type==='enrich_done'){
+        // Always replay all card keys from enrich_done data
+        // (covers cached path, _last_state replay, and late SSE reconnects)
+        const _skip=new Set(['geocode']);
+        Object.entries(msg.data).forEach(([k,v])=>{ if(!_skip.has(k)&&v) applyUpdate(k,v); });
+        if(_loadCount===0) _gaugeUpdate(_LOAD_TOTAL);
+        applyDone(msg.data,msg.cached);
+        _gaugeComplete();
+      }
+      else if(msg.type==='call_connected') renderCall(msg.data);
+    }catch(err){console.error('SSE parse error',err);}
+  };
+}
+
+let _curContact=null;
+
+/* ── HOT ROD GAUGE ─────────────────────────────── */
+const _LOAD_TOTAL = 16;  // flood,soil,wetlands,slope,zoning,drive,epa_echo,superfund,streams,census,assess,offer,escalations,roads,power,dams
+let _loadCount = 0;
+let _fromCache = false;
+
+function _gaugeSetNeedle(P) {
+  // Needle starts pointing left (rotate 0°) at P=0, sweeps CCW to pointing right at P=1
+  const deg = -(P * 180);
+  $('g-needle').style.transform = `rotate(${deg.toFixed(2)}deg)`;
+}
+
+function _gaugeShow() {
+  _loadCount = 0;
+  const g = $('load-gauge');
+  g.style.transition = 'none';
+  g.style.opacity = '1';
+  g.style.display = 'flex';
+  // Reset arc & needle to 0 instantly (no transition on first set)
+  const arc = $('g-arc');
+  arc.style.transition = 'none';
+  arc.style.strokeDashoffset = '251.3';
+  $('g-needle').style.transition = 'none';
+  _gaugeSetNeedle(0);
+  $('g-pct').textContent = '0%';
+  $('g-pct').setAttribute('fill','white');
+  $('g-sub').textContent = 'LOADING DATA';
+  $('g-count').textContent = '0 / ' + _LOAD_TOTAL + ' APIs loaded';
+  $('g-count').style.color = '';
+  // Re-enable transition next frame
+  requestAnimationFrame(()=>{
+    arc.style.transition = '';
+    $('g-needle').style.transition = '';
+  });
+}
+
+function _gaugeUpdate(count) {
+  const P = Math.min(count, _LOAD_TOTAL) / _LOAD_TOTAL;
+  $('g-arc').style.strokeDashoffset = (251.3 * (1 - P)).toFixed(2);
+  _gaugeSetNeedle(P);
+  const pct = Math.round(P * 100);
+  $('g-pct').textContent = pct + '%';
+  $('g-pct').setAttribute('fill', P >= 0.75 ? '#ff6b35' : P >= 0.4 ? '#ffcc00' : 'white');
+  $('g-count').textContent = count + ' / ' + _LOAD_TOTAL + ' APIs loaded';
+}
+
+function _gaugeComplete() {
+  const g = $('load-gauge');
+  if (!g || g.style.display === 'none') return;
+  _gaugeUpdate(_LOAD_TOTAL);
+  $('g-pct').textContent = '100%';
+  $('g-pct').setAttribute('fill', '#23d160');
+  $('g-sub').textContent = 'DATA LOADED';
+  $('g-count').textContent = _LOAD_TOTAL + ' / ' + _LOAD_TOTAL + ' APIs loaded';
+  $('g-count').style.color = 'var(--green)';
+  setTimeout(()=>{
+    g.style.transition = 'opacity 0.7s ease';
+    g.style.opacity = '0';
+    setTimeout(()=>{ g.style.display='none'; g.style.transition=''; }, 720);
+  }, 900);
+}
+/* ─────────────────────────────────────────────── */
+
+function renderContact(d){
+  _curContact=d;
+  $('waiting').classList.add('hidden');
+  $('header').style.display='flex';
+  $('main').style.display='grid';
+  $('links-bar').style.display='flex';
+  $('autodq').style.display='none';
+  if(!_fromCache) {
+    _gaugeShow();
+    // Force-complete gauge after 45s if APIs are hanging
+    setTimeout(function(){
+      if(_loadCount < _LOAD_TOTAL){
+        console.warn('Gauge timeout: forcing complete at',_loadCount,'/',_LOAD_TOTAL);
+        _gaugeComplete();
+      }
+    }, 45000);
+  }
+  _fromCache=false;
+
+  $('h-owner').textContent=d.owner_name||'—';
+  $('h-addr').textContent=d.owner_address||'—';
+  $('h-parcel').textContent='Parcel: '+(d.parcel_id||'—');
+  const pri=(d.priority||'').toUpperCase();
+  const pt=$('priority-tag');
+  pt.textContent=pri||'UNRANKED';
+  pt.className=pri.includes('1')?'t1':pri.includes('2')?'t2':'t3';
+  $('score-num').innerHTML='<span class="spin"></span>';
+  $('score-ring').style.strokeDashoffset='144.5';
+  $('offer-range').innerHTML='<span class="spin"></span>';
+
+  $('f-mkt').textContent=fmt(d.market_value);
+  $('f-cma').textContent=fmt(d.cma_value);
+  $('f-range').textContent=(d.cma_low&&d.cma_high)?fmt(d.cma_low)+' – '+fmt(d.cma_high):'—';
+  $('f-tax').textContent=d.tax_delinquent||'—';
+  $('f-taxyr').textContent=d.delinquent_year?'Since '+d.delinquent_year:'';
+  $('f-owed').textContent=fmt(d.total_owed);
+  $('f-annual').textContent=d.annual_tax?fmt(d.annual_tax)+'/yr':'';
+
+  $('r-addr').textContent=d.property_address||'—';
+  $('r-acres').textContent=d.acreage?d.acreage+' acres':'—';
+  $('r-zip').textContent=d.zip_code||'—';
+  $('r-use').textContent=d.land_use||'—';
+  $('r-agent').textContent=d.agent||'—';
+
+  const flags=[];
+  if((d.absentee_owner||'').toLowerCase()==='yes') flags.push({t:'Absentee Owner',c:'red'});
+  if((d.long_term||'').toLowerCase()==='true')     flags.push({t:'Long-Term Owner',c:'yellow'});
+  if((d.tax_delinquent||'').toUpperCase()==='yes') flags.push({t:'Tax Delinquent',c:'red'});
+  $('flags-row').innerHTML=flags.map(f=>`<span class="pill ${f.c}">${f.t}</span>`).join('');
+
+  const comps=(d.comps||[]).filter(c=>c.address);
+  $('comps-body').innerHTML=comps.length
+    ?comps.map((c,i)=>`<tr>
+        <td style="color:var(--subtle)">${i+1}</td>
+        <td>${c.zillow?`<a href="${c.zillow}" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${c.address||'—'}</a>`:c.address||'—'}</td>
+        <td class="c-acre">${fmtA(c.acres)}</td>
+        <td class="c-date">${c.date||'—'}</td>
+        <td class="c-price">${fmt(c.price)}</td>
+        <td class="c-acre">${fmt(c.per_acre)}/ac</td>
+        <td style="white-space:nowrap">${c.google?`<a href="${c.google}" target="_blank" style="color:#4db6f4;font-size:11px">Maps</a>`:''}</td>
+      </tr>`).join('')
+    :'<tr><td colspan="6" style="color:var(--subtle);text-align:center;padding:16px">No comp data</td></tr>';
+
+  _updateLinks(d,null);
+
+  ['access','soil','slope','flood','wetlands','streams','epa','superfund','zoning','power','dams','drive'].forEach(k=>
+    setAG('ag-'+k,'checking','—',''));
+  $('ctx-vac').textContent='—';
+  $('ctx-income').textContent='';
+  $('ctx-drive').textContent='—';
+  $('ctx-walmart').textContent='';
+  $('ctx-elev').textContent='—';
+  $('ctx-slope').textContent='';
+  $('z-code').textContent='—';
+  $('z-desc').textContent='';
+  $('z-source').textContent='';
+  $('epa-panel').style.display='none';
+  $('esc-body').innerHTML='<div style="color:var(--subtle)">Generating after enrichment...</div>';
+  $('updated').textContent='Fired '+new Date().toLocaleTimeString();
+}
+
+function _updateLinks(d,gc){
+  const addr=encodeURIComponent((d.property_address||'')+' Columbus OH '+(d.zip_code||''));
+  const own=encodeURIComponent(d.owner_name||'');
+  if(gc&&gc.lat&&gc.lon){
+    $('btn-maps').href=`https://www.google.com/maps/@${gc.lat},${gc.lon},18z/data=!3m1!1e3`;
+    $('btn-street').href=`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${gc.lat},${gc.lon}`;
+  } else {
+    $('btn-maps').href=`https://www.google.com/maps/search/?api=1&query=${addr}&t=k`;
+    $('btn-street').href=`https://www.google.com/maps/@?api=1&map_action=pano&query=${addr}`;
+  }
+  $('btn-owner').href=`https://www.google.com/search?q=${own}+Columbus+Ohio+land+owner`;
+  $('btn-zillow').href=`https://www.zillow.com/homes/${addr}_rb/`;
+  $('btn-landwatch').href=`https://www.landwatch.com/ohio-land-for-sale/franklin-county`;
+}
+
+const _KEY_TO_CARD={
+  roads:'ag-access',soil:'ag-soil',slope:'ag-slope',flood:'ag-flood',
+  wetlands:'ag-wetlands',streams:'ag-streams',epa_echo:'ag-epa',
+  superfund:'ag-superfund',power:'ag-power',dams:'ag-dams',drive:'ag-drive'
+};
+
+function _compRow(i,c){
+  const addr=c.zillow
+    ?`<a href="${c.zillow}" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${c.address||'—'}</a>`
+    :c.address||'—';
+  return `<tr>
+    <td style="color:var(--subtle)">${i+1}</td>
+    <td>${addr}</td>
+    <td class="c-acre">${fmtA(c.acres)}</td>
+    <td class="c-date">${c.date||'—'}</td>
+    <td class="c-price">${fmt(c.price)}</td>
+    <td class="c-acre">${fmt(c.per_acre)}/ac</td>
+    <td style="white-space:nowrap">${c.google?`<a href="${c.google}" target="_blank" style="color:#4db6f4;font-size:11px">Maps</a>`:''}</td>
+  </tr>`;
+}
+
+function applyUpdate(key,data){
+  if(!data) return;  // guard against null payloads
+  _loadCount++;
+  _gaugeUpdate(_loadCount);
+  const cardId=_KEY_TO_CARD[key];
+  if(cardId&&data.flag) setAG(cardId,data.cls||'grey',data.flag,data.label||'');
+
+  // Preliminary score/offer/escalations pushed before Overpass completes
+  if(key==='assess')      { applyDone({assess:data},      false); return; }
+  if(key==='offer')       { applyDone({offer:data},       false); return; }
+  if(key==='escalations') { applyDone({escalations:data}, false); return; }
+
+  if(key==='comps'){
+    const comps=(data.comps||[]).filter(c=>c.address);
+    $('comps-body').innerHTML=comps.length
+      ?comps.map((c,i)=>_compRow(i,c)).join('')
+      :'<tr><td colspan="7" style="color:var(--subtle);text-align:center;padding:16px">No comp data</td></tr>';
+    return;
+  }
+  if(key==='comps_extra'){
+    const existing=$('comps-body').querySelectorAll('tr').length;
+    const rows=(data||[]).filter(c=>c.address).map((c,i)=>_compRow(existing+i,c)).join('');
+    if(rows) $('comps-body').insertAdjacentHTML('beforeend',rows);
+    return;
+  }
+  if(key==='zoning'){
+    if(data.zone){
+      $('z-code').textContent=data.zone.toUpperCase();
+      $('z-desc').textContent=data.description||data.zone;
+      $('z-source').textContent='Source: '+(data.source||'');
+      setAG('ag-zoning',data.cls||'green',data.flag||data.zone,data.description||'County GIS');
+    } else {
+      $('z-code').textContent='N/A';
+      $('z-desc').textContent=data.label||'Could not retrieve zoning';
+      setAG('ag-zoning','grey','UNAVAILABLE',data.label||'');
+    }
+  }
+  if(key==='census'){
+    $('ctx-vac').textContent=data.vacancy_rate!=null?data.vacancy_rate+'%':'N/A';
+    $('ctx-vac').style.color=data.cls==='red'?'var(--red)':data.cls==='yellow'?'var(--yellow)':'var(--green)';
+    $('ctx-income').textContent='Median income: '+(data.income_fmt||'N/A');
+  }
+  if(key==='drive'){
+    $('ctx-drive').textContent=data.minutes_downtown!=null?data.minutes_downtown+' min':'N/A';
+    $('ctx-drive').style.color=data.cls==='red'?'var(--red)':data.cls==='yellow'?'var(--yellow)':'var(--green)';
+    $('ctx-walmart').textContent=data.minutes_walmart!=null?data.minutes_walmart+' min to Walmart':'';
+  }
+  if(key==='slope'){
+    $('ctx-elev').textContent=data.elevation_ft!=null?data.elevation_ft+'ft':'N/A';
+    $('ctx-slope').textContent=data.slope_pct!=null?'Est. slope: '+data.slope_pct+'%':'';
+  }
+  if(key==='soil'&&data.hydric_flag){
+    $('flags-row').innerHTML+=`<span class="pill red">${data.hydric_flag}</span>`;
+  }
+  if(key==='epa_echo'&&data.items&&data.items.length&&data.cls==='red'){
+    $('epa-panel').style.display='block';
+    $('epa-list').innerHTML=data.items.map(i=>`<li>${i}</li>`).join('');
+  }
+}
+
+function applyDone(data,cached){
+  if(data.geocode&&_curContact) _updateLinks(_curContact,data.geocode);
+  if(data.assess){
+    const a=data.assess;
+    $('score-num').textContent=a.score;
+    $('score-num').className='sc-'+a.grade_cls;
+    $('score-lbl').textContent='GRADE '+a.grade;
+    animateRing(a.score);
+    if(a.auto_disqualify){
+      $('autodq').style.display='block';
+      $('dq-reason').textContent=a.deductions.slice(0,3).join(' | ');
+    }
+  }
+  if(data.offer){
+    $('offer-range').textContent=data.offer.range_fmt;
+    $('mao-lbl').textContent='MAO: '+data.offer.mao_fmt;
+  } else if(_curContact&&_curContact.cma_value){
+    $('offer-range').textContent='No CMA data';
+    $('mao-lbl').textContent='';
+  }
+  if(data.escalations&&data.escalations.length){
+    $('esc-body').innerHTML=data.escalations.map(c=>`
+      <div class="esc-item pop">
+        <div class="esc-office">📞 ${c.office}</div>
+        <div class="esc-when">${c.when}</div>
+        <div class="esc-ask">${c.ask}</div>
+      </div>`).join('');
+  } else if(!data.error){
+    $('esc-body').innerHTML='<div style="color:var(--subtle)">No escalations needed</div>';
+  }
+  $('updated').textContent=(cached?'⚡ Cached — ':'Enriched ')+new Date().toLocaleTimeString();
+}
+
+function renderCall(d){
+  _fromCache=true;
+  renderContact(d);
+  if(d.enrichment&&Object.keys(d.enrichment).length>0){
+    const e=d.enrichment;
+    Object.entries(_KEY_TO_CARD).forEach(([k,id])=>{if(e[k]) applyUpdate(k,e[k]);});
+    ['zoning','census','drive','slope','soil','epa_echo','comps'].forEach(k=>{if(e[k]) applyUpdate(k,e[k]);});
+    if(e.comps&&e.comps.extra&&e.comps.extra.length) applyUpdate('comps_extra',e.comps.extra);
+    applyDone(e,false);
+  }
+}
+
+connect();
+</script>
+</body>
+</html>
