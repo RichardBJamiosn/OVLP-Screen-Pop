@@ -33,6 +33,16 @@ if [ $? -ne 0 ]; then
 fi
 
 curl -s "$BASE_URL/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
+curl -s "$BASE_URL/Update.command" -o "$INSTALL_DIR/Update.command"
+chmod +x "$INSTALL_DIR/Update.command"
+
+# Update GHL API key in local config (key renewed May 2026)
+CONFIG="$INSTALL_DIR/ovlp_config.json"
+if [ -f "$CONFIG" ]; then
+  # Replace old key with new one — sed in-place
+  sed -i '' 's/pit-b22dd6ac-f2a9-4494-b5d9-f7445eaad947/pit-2deedc16-1298-4f13-b978-581d6fa85920/g' "$CONFIG"
+  echo "  ✓ API key updated"
+fi
 
 echo "  ✓ Files updated"
 echo ""
