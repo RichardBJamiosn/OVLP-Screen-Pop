@@ -53,7 +53,7 @@ if echo "$STATUS" | grep -q "running"; then
   echo "  ✓ Server running"
   echo ""
   echo "================================================"
-  echo "   Update complete — you are on v2.0"
+  echo "   Update complete — you are on v2.2"
   echo "================================================"
   echo ""
   echo "  Hard refresh your browser to see the changes:"

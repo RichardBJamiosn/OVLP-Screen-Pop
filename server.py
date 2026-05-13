@@ -286,6 +286,106 @@ def fetch_ghl_contact(contact_id):
         return None, str(e)
 
 # ─────────────────────────────────────────────
+# PHONE INDEX — reverse lookup: any phone → contact ID + name + property
+# ─────────────────────────────────────────────
+
+_phone_index = {}        # normalized_phone -> {contact_id, contact_name, property_address, phone_type}
+_phone_index_lock = threading.Lock()
+_phone_index_ts   = 0    # last rebuild timestamp
+
+def _normalize_phone(raw):
+    """Strip to digits only. If 11 digits starting with 1, drop the 1."""
+    digits = re.sub(r'\D', '', str(raw))
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]
+    return digits if len(digits) >= 7 else ""
+
+def _build_phone_index():
+    """Paginate all GHL contacts, extract every phone number, build reverse map."""
+    global _phone_index_ts
+    key = _ghl_key()
+    if not key:
+        print("[phone_index] No GHL API key — skipping")
+        return
+    loc = _load_cfg().get("ghl_location_id", "")
+    if not loc:
+        print("[phone_index] No location ID — skipping")
+        return
+
+    idx = {}
+    total = 0
+    start_after = None
+    start_after_id = None
+
+    while True:
+        url = f"https://services.leadconnectorhq.com/contacts/?locationId={loc}&limit=100"
+        if start_after and start_after_id:
+            url += f"&startAfter={start_after}&startAfterId={start_after_id}"
+        try:
+            data = http_get(url, timeout=15, headers=_ghl_headers())
+        except Exception as e:
+            print(f"[phone_index] API error on page: {e}")
+            break
+
+        contacts = data.get("contacts", [])
+        if not contacts:
+            break
+
+        for c in contacts:
+            cid  = c.get("id", "")
+            name = c.get("contactName") or f"{c.get('firstName','')} {c.get('lastName','')}".strip()
+            # We don't have property_address from list endpoint — store what we have
+            entry_base = {"contact_id": cid, "contact_name": name}
+
+            # 1. Primary phone
+            primary = _normalize_phone(c.get("phone", ""))
+            if primary:
+                idx[primary] = {**entry_base, "phone_type": "primary"}
+
+            # 2. Additional phones
+            for ap in c.get("additionalPhones", []):
+                num = _normalize_phone(ap if isinstance(ap, str) else ap.get("phone", ""))
+                if num and num != primary:
+                    idx[num] = {**entry_base, "phone_type": "additional"}
+
+            # 3. Custom fields that look like phone numbers
+            for cf in c.get("customFields", []):
+                val = str(cf.get("value", ""))
+                digits = re.sub(r'\D', '', val)
+                if 10 <= len(digits) <= 11:
+                    num = _normalize_phone(val)
+                    if num and num not in idx:
+                        idx[num] = {**entry_base, "phone_type": "custom_field"}
+
+        total += len(contacts)
+        meta = data.get("meta", {})
+        start_after = meta.get("startAfter")
+        start_after_id = meta.get("startAfterId")
+        if not meta.get("nextPage"):
+            break
+
+    with _phone_index_lock:
+        _phone_index.clear()
+        _phone_index.update(idx)
+        _phone_index_ts = time.time()
+
+    print(f"[phone_index] Built: {len(idx)} numbers from {total} contacts")
+
+def _ensure_phone_index(max_age=3600):
+    """Rebuild index if stale (default: older than 1 hour)."""
+    if time.time() - _phone_index_ts > max_age:
+        _build_phone_index()
+
+def phone_lookup(raw_number):
+    """Look up a phone number. Returns match dict or None."""
+    _ensure_phone_index()
+    norm = _normalize_phone(raw_number)
+    if not norm:
+        return None
+    with _phone_index_lock:
+        return _phone_index.get(norm)
+
+# ─────────────────────────────────────────────
 
 def bbox(lat, lon, miles=1.0):
     """Return (south, west, north, east) bounding box."""
@@ -848,8 +948,11 @@ def get_zoning(lat, lon):
                 full_desc = desc
                 if height: full_desc += f" | {height}"
                 label = f"{full_desc} — {source_name}" if full_desc else source_name
+                # Pull county land value from Franklin County parcel data (used as guardrail)
+                county_land_value = attrs.get("LNDVALUEBASE") or attrs.get("LNDVALUE") or 0
                 return {"zone": zone, "description": full_desc, "flag": flag, "cls": cls,
-                        "label": label, "source": source_name}
+                        "label": label, "source": source_name,
+                        "county_land_value": float(county_land_value or 0)}
             elif desc and src_type == "franklin":
                 # No zone code but has classification description
                 residential = any(x in desc.upper() for x in ["RESID","VACANT LAND","LOT"])
@@ -893,9 +996,14 @@ def get_drive_time(lat, lon):
 # Falls back to GHL contact comps if live query fails or returns < 2 results
 # ─────────────────────────────────────────────
 
-def _arcgis_comps_query(lat, lon, miles, cutoff_dt):
+def _arcgis_comps_query(lat, lon, miles, cutoff_dt, classcd_filter=True):
     s, w, n, e = bbox(lat, lon, miles)
     where = f"SALEDATE >= timestamp '{cutoff_dt}' AND SALEPRICE>500 AND STATEDAREA>0"
+    if classcd_filter:
+        # Only pull vacant land parcels — Franklin County uses:
+        #   500 = vacant residential land, 501 = vacant residential w/ minor use
+        #   400 = vacant commercial land
+        where += " AND CLASSCD IN (400, 500, 501)"
     params = urllib.parse.urlencode({
         "geometry": f"{w},{s},{e},{n}",
         "geometryType": "esriGeometryEnvelope",
@@ -905,7 +1013,7 @@ def _arcgis_comps_query(lat, lon, miles, cutoff_dt):
         "outFields": "SITEADDRESS,ZIPCD,STATEDAREA,SALEPRICE,SALEDATE,CLASSCD,PARCELID",
         "returnGeometry": "false",
         "orderByFields": "SALEDATE DESC",
-        "resultRecordCount": 50,
+        "resultRecordCount": 100,
         "f": "json"
     })
     url = ("https://gis.franklincountyohio.gov/hosting/rest/services"
@@ -916,12 +1024,21 @@ def get_comps(lat, lon, acreage, contact_comps=None):
     try:
         import datetime
         cutoff_dt = (datetime.datetime.utcnow() - datetime.timedelta(days=3*365)).strftime("%Y-%m-%d %H:%M:%S")
-        # Try 3-mile bbox first; expand to 8 miles if dry
-        features = _arcgis_comps_query(lat, lon, 3.0, cutoff_dt)
+        # 1) Vacant land only (CLASSCD 400/500/501), 5mi then 15mi
+        broadened = False
+        features = _arcgis_comps_query(lat, lon, 5.0, cutoff_dt, classcd_filter=True)
         if not features:
-            features = _arcgis_comps_query(lat, lon, 8.0, cutoff_dt)
+            features = _arcgis_comps_query(lat, lon, 15.0, cutoff_dt, classcd_filter=True)
             if features:
-                print(f"[comps] 3mi dry — expanded to 8mi, got {len(features)} features")
+                print(f"[comps] vacant 5mi dry — expanded to 15mi, got {len(features)} features")
+        # 2) If still empty, broaden to ALL class codes with expanding radius
+        for broad_mi in (3.0, 8.0):
+            if not features:
+                features = _arcgis_comps_query(lat, lon, broad_mi, cutoff_dt, classcd_filter=False)
+                if features:
+                    broadened = True
+                    print(f"[comps] no vacant land sales — broadened to all classes {broad_mi}mi, got {len(features)} features")
+                    break
         print(f"[comps] raw query returned {len(features)} features at ({lat:.4f},{lon:.4f})")
 
         results = []
@@ -944,17 +1061,33 @@ def get_comps(lat, lon, acreage, contact_comps=None):
             classcd = str(a.get("CLASSCD") or "")
             if not address or price < 500 or acres < 0.05:
                 skip_basic += 1; continue
-            # Exclude clearly improved residential (100-199)
+            # Classcd filtering depends on search mode:
+            # Strict (vacant land found): only keep 400/500/501
+            # Broadened (no vacant land nearby): only exclude houses/condos (510+)
+            #   — keep commercial codes (400s) since $/ac cap guards inflated values
             if classcd and classcd.isdigit():
                 cd = int(classcd)
-                if 100 <= cd <= 199:
-                    skip_classcd += 1; continue
-            # Filter: acreage within 10x or 1/10 of subject
+                if broadened:
+                    # Only exclude residential improved: houses, duplexes, condos
+                    if cd >= 510:
+                        skip_classcd += 1; continue
+                else:
+                    # Strict: exclude everything except vacant land
+                    if (100 <= cd <= 199) or (401 <= cd <= 499) or (510 <= cd <= 599):
+                        skip_classcd += 1; continue
+            # Filter: acreage within 5x or 1/5 of subject
+            # Tighter than before — tiny urban lots ($860k/ac) aren't comparable to 0.7ac parcels
             if subject_acres > 0:
                 ratio = acres / subject_acres
-                if ratio > 10 or ratio < 0.05:
+                if ratio > 5 or ratio < 0.2:
                     skip_ratio += 1; continue
             per_acre = int(price / acres) if acres else 0
+            # Sanity cap for non-vacant codes that slipped past classcd filter.
+            # Known vacant land (400/500/501) is exempt — urban vacant lots
+            # legitimately sell above $200k/ac in Columbus metro.
+            is_vacant_code = classcd.isdigit() and int(classcd) in (400, 500, 501)
+            if not is_vacant_code and per_acre > 200000:
+                skip_basic += 1; continue
             sale_date = ""
             if sale_ts:
                 sale_date = datetime.datetime.utcfromtimestamp(sale_ts / 1000).strftime("%Y-%m-%d")
@@ -1015,7 +1148,7 @@ def get_comps(lat, lon, acreage, contact_comps=None):
 
         print(f"[comps] filters: basic={skip_basic} classcd={skip_classcd} ratio={skip_ratio} → {len(results)} comps (subject={subject_acres}ac) classcd_dist={dict(sorted(classcd_counts.items()))}")
         if not results:
-            return {"comps": [], "flag": "NO COMPS", "cls": "grey", "label": "No recent land sales found within 3 miles"}
+            return {"comps": [], "flag": "NO COMPS", "cls": "grey", "label": "No recent vacant land sales found nearby"}
 
         avg_per_acre = int(sum(c["per_acre"] for c in results) / len(results)) if results else 0
         print(f"[comps] returning {len(results)} comps (+{len(extra)} extra), avg_per_acre=${avg_per_acre:,}")
@@ -1234,6 +1367,18 @@ def enrich_property(prop_address, city_state, contact):
             acres = 0
         if avg_per_acre and acres:
             cma = avg_per_acre * acres
+    # Sanity guardrail: if county market value exists, cap comp-derived CMA
+    # at 3× market value. Prevents tiny-lot $/ac from inflating large parcels.
+    # Sources: GHL custom field → county GIS LNDVALUEBASE (always available)
+    try:
+        mv = float(str(contact.get("market_value") or "0").replace(",","").replace("$",""))
+    except (ValueError, TypeError):
+        mv = 0
+    if not mv:
+        mv = float(store.get("zoning", {}).get("county_land_value", 0) or 0)
+    if mv > 0 and cma and float(cma) > mv * 3:
+        print(f"[offer] CMA ${float(cma):,.0f} exceeds 3× market value ${mv:,.0f} — capping at ${mv*2:,.0f}")
+        cma = mv * 2
     store["offer"] = calc_offer_range(cma)
     return store
 
@@ -1283,8 +1428,18 @@ def build_contact(raw):
 @app.route("/")
 def dashboard():
     from flask import redirect
-    if not request.args.get("agent"):
+    agent = request.args.get("agent", "").strip()
+    if not agent:
         return redirect("/?agent=richard")
+    # Normalize agent slug — strip trailing port numbers / garbage
+    # so bookmarks like "richard5050" resolve to "richard"
+    cfg = _load_cfg()
+    known_slugs = {a["slug"] for a in cfg.get("agents", [])}
+    if agent not in known_slugs:
+        # Try matching by prefix — "richard5050" → "richard"
+        for slug in known_slugs:
+            if agent.startswith(slug):
+                return redirect(f"/?agent={slug}")
     resp = send_from_directory(".", "dashboard.html")
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
@@ -1568,10 +1723,17 @@ def test_webhook():
     return jsonify({"status":"ok","contact":contact["owner_name"],
                     "note":"13 APIs running in parallel — results push to dashboard via SSE"}), 200
 
-@app.route("/pop")
+@app.route("/pop", methods=["GET", "OPTIONS"])
 def pop_contact():
     """One-click bookmarklet endpoint — fetches GHL contact and fires screen pop."""
-    cors = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"}
+    cors = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "no-store",
+    }
+    if request.method == "OPTIONS":
+        return Response("", status=204, headers=cors)
     contact_id    = request.args.get("contact_id", "").strip()
     agent_override= request.args.get("agent", "").strip()
 
@@ -1618,7 +1780,7 @@ def setup():
             f"javascript:(function(){{"
             f"var m=location.href.match(/contacts\\/(?:detail\\/)?([A-Za-z0-9]{{15,}})/);"
             f"if(!m){{alert('Open a GHL contact first');return;}}"
-            f"fetch('{srv_url}/pop?contact_id='+m[1]+'&agent={urllib.parse.quote(ag_slug)}&_='+Date.now()).catch(function(){{}});"
+            f"window.open('{srv_url}/pop?contact_id='+m[1]+'&agent={urllib.parse.quote(ag_slug)}&_='+Date.now(),'_ovlp','width=1,height=1');"
             f"}})();"
         )
 
@@ -1686,6 +1848,11 @@ h3{{color:#eee;margin-bottom:16px}}
   ▶ VIEW RECENT POPS →
 </a>
 <span style="color:#555;font-size:11px;margin-left:12px">Last 5 pops — geocode source, comps, API results, errors</span>
+<br><br>
+<a href="/lookup" style="display:inline-block;padding:9px 20px;background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.35);border-radius:8px;color:#2ecc71;font-weight:700;font-size:12px;text-decoration:none;letter-spacing:.06em">
+  ▶ PHONE LOOKUP →
+</a>
+<span style="color:#555;font-size:11px;margin-left:12px">Reverse search — find which property a phone number belongs to</span>
 
 <script>
 function save(){{
@@ -1699,6 +1866,149 @@ function save(){{
 }}
 </script></body></html>"""
     return html
+
+@app.route("/lookup", methods=["GET"])
+def lookup_page():
+    """Reverse phone lookup — paste a number, find which contact/property it belongs to."""
+    phone_q  = request.args.get("phone", "").strip()
+    agent    = request.args.get("agent", "richard").strip()
+    cfg      = _load_cfg()
+    srv_url  = cfg.get("server_url", "http://localhost:5050").rstrip("/")
+
+    result_html = ""
+    if phone_q:
+        match = phone_lookup(phone_q)
+        if match:
+            cid   = match["contact_id"]
+            cname = match["contact_name"] or "(no name)"
+            ptype = match["phone_type"]
+            pop_url = f"{srv_url}/pop?contact_id={cid}&agent={urllib.parse.quote(agent)}"
+            result_html = f'''
+            <div class="result match">
+                <div class="match-label">MATCH FOUND</div>
+                <div class="match-name">{cname}</div>
+                <div class="match-detail">Phone type: <b>{ptype}</b></div>
+                <div class="match-detail">Contact ID: <code>{cid}</code></div>
+                <div class="match-actions">
+                    <a href="{pop_url}" target="_blank" class="pop-btn">POP THIS CONTACT</a>
+                </div>
+            </div>'''
+        else:
+            # Fallback: try GHL search API directly
+            fb_html = ""
+            try:
+                body = json.dumps({
+                    "locationId": cfg.get("ghl_location_id", ""),
+                    "page": 1, "pageLimit": 5,
+                    "query": _normalize_phone(phone_q)
+                }).encode()
+                req_url = "https://services.leadconnectorhq.com/contacts/search"
+                r = urllib.request.Request(req_url, data=body, method="POST", headers={
+                    **_ghl_headers(),
+                    "Content-Type": "application/json",
+                    "User-Agent": "OVLP-ScreenPop/2.0"
+                })
+                resp = urllib.request.urlopen(r, timeout=10, context=_SSL)
+                sdata = json.loads(resp.read())
+                hits = sdata.get("contacts", [])
+                if hits:
+                    fb_html = '<div class="fb-label">GHL search found:</div>'
+                    for h in hits[:5]:
+                        hname = h.get("contactName") or f"{h.get('firstName','')} {h.get('lastName','')}".strip()
+                        hid   = h.get("id","")
+                        hph   = h.get("phone","")
+                        pop_url = f"{srv_url}/pop?contact_id={hid}&agent={urllib.parse.quote(agent)}"
+                        fb_html += f'''
+                        <div class="fb-row">
+                            <span class="fb-name">{hname or "(no name)"}</span>
+                            <span class="fb-phone">{hph}</span>
+                            <a href="{pop_url}" target="_blank" class="pop-btn-sm">POP</a>
+                        </div>'''
+            except Exception as e:
+                fb_html = f'<div class="fb-err">GHL search failed: {e}</div>'
+
+            result_html = f'''
+            <div class="result no-match">
+                <div class="match-label" style="color:#ff4757">NO MATCH IN INDEX</div>
+                <div class="match-detail">Searched: {_normalize_phone(phone_q)}</div>
+                <div class="match-detail" style="color:#888">Index has {len(_phone_index)} numbers from GHL</div>
+                {fb_html}
+            </div>'''
+
+    html = f'''<!DOCTYPE html><html><head><title>OVLP Phone Lookup</title>
+<style>
+*{{box-sizing:border-box}}
+body{{font-family:monospace;background:#0d0d0d;color:#eee;padding:32px;max-width:700px;margin:0 auto}}
+h2{{color:#4a9eff;margin-bottom:4px}}
+.subtitle{{color:#555;font-size:12px;margin-bottom:24px}}
+.search-box{{display:flex;gap:8px;margin-bottom:24px}}
+input[type=text]{{flex:1;padding:12px;background:#1a1a1a;border:1px solid #333;color:#eee;border-radius:6px;font-family:monospace;font-size:16px}}
+input[type=text]:focus{{border-color:#4a9eff;outline:none}}
+.search-btn{{padding:12px 24px;background:#4a9eff;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:14px}}
+.search-btn:hover{{background:#6ab4ff}}
+.result{{background:#111;border:1px solid #222;border-radius:8px;padding:20px;margin-bottom:16px}}
+.match{{border-color:#2ecc71}}
+.no-match{{border-color:#ff4757}}
+.match-label{{font-size:11px;font-weight:700;color:#2ecc71;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}}
+.match-name{{font-size:20px;font-weight:700;margin-bottom:8px}}
+.match-detail{{color:#888;font-size:12px;margin-bottom:4px}}
+.match-detail b{{color:#ccc}}
+.match-actions{{margin-top:14px}}
+.pop-btn{{display:inline-block;padding:10px 28px;background:#2ecc71;color:#000;font-weight:700;border-radius:6px;text-decoration:none;font-size:13px;letter-spacing:.05em}}
+.pop-btn:hover{{background:#27ae60}}
+.pop-btn-sm{{display:inline-block;padding:5px 14px;background:#4a9eff;color:#000;font-weight:700;border-radius:4px;text-decoration:none;font-size:11px;margin-left:8px}}
+.fb-label{{color:#ffb300;font-size:11px;font-weight:700;margin:12px 0 8px;text-transform:uppercase;letter-spacing:.08em}}
+.fb-row{{background:#0a0a0a;border:1px solid #1e1e1e;border-radius:4px;padding:8px 12px;margin-bottom:4px;display:flex;align-items:center;gap:12px;font-size:12px}}
+.fb-name{{color:#ccc;font-weight:700;min-width:120px}}
+.fb-phone{{color:#888;flex:1}}
+.fb-err{{color:#ff4757;font-size:11px;margin-top:8px}}
+.stats{{color:#555;font-size:11px;margin-top:16px}}
+.stats b{{color:#888}}
+.nav{{margin-top:24px;font-size:11px}}
+.nav a{{color:#4a9eff;text-decoration:none;margin-right:16px}}
+code{{background:#1a1a1a;padding:2px 6px;border-radius:3px;font-size:11px;color:#a78bfa}}
+.refresh-btn{{padding:6px 16px;background:#222;color:#888;border:1px solid #333;border-radius:4px;cursor:pointer;font-size:11px;margin-left:8px}}
+.refresh-btn:hover{{color:#eee;border-color:#4a9eff}}
+</style></head><body>
+<h2>OVLP Phone Lookup</h2>
+<div class="subtitle">Reverse search — find which property contact a phone number belongs to</div>
+<form method="GET" action="/lookup">
+<input type="hidden" name="agent" value="{agent}">
+<div class="search-box">
+    <input type="text" name="phone" placeholder="Enter phone number..." value="{phone_q}" autofocus>
+    <button type="submit" class="search-btn">SEARCH</button>
+</div>
+</form>
+{result_html}
+<div class="stats">
+    Index: <b>{len(_phone_index)}</b> phone numbers mapped &nbsp;|&nbsp;
+    Last built: <b>{time.strftime("%H:%M:%S", time.localtime(_phone_index_ts)) if _phone_index_ts else "never"}</b>
+    <button class="refresh-btn" onclick="fetch('/lookup/rebuild').then(r=>r.json()).then(d=>{{alert('Rebuilt: '+d.count+' numbers');location.reload();}})">Rebuild Index</button>
+</div>
+<div class="nav">
+    <a href="/setup">Setup</a>
+    <a href="/recent">Recent Pops</a>
+    <a href="/?agent={agent}">Dashboard</a>
+</div>
+</body></html>'''
+    return html
+
+@app.route("/lookup/rebuild")
+def lookup_rebuild():
+    """Force rebuild the phone index."""
+    _build_phone_index()
+    return jsonify({"status": "rebuilt", "count": len(_phone_index), "ts": _phone_index_ts})
+
+@app.route("/lookup/api")
+def lookup_api():
+    """JSON API for phone lookup — for programmatic use."""
+    phone = request.args.get("phone", "").strip()
+    if not phone:
+        return jsonify({"error": "missing phone parameter"}), 400
+    match = phone_lookup(phone)
+    if match:
+        return jsonify({"match": True, **match})
+    return jsonify({"match": False, "searched": _normalize_phone(phone)})
 
 @app.route("/ping")
 def ping(): return jsonify({"status":"running","apis":13,"time":time.time()})
@@ -1760,6 +2070,8 @@ def recent():
 
 if __name__ == "__main__":
     _pop_history.extend(_load_pop_history())
+    # Build phone index in background so startup isn't blocked
+    threading.Thread(target=_build_phone_index, daemon=True).start()
     print("\n  OVLP Screen Pop — Ohio Valley Land Partners")
     print("  ──────────────────────────────────────────────────────")
     print("  Richard:  http://localhost:5050/?agent=richard")
@@ -1767,6 +2079,7 @@ if __name__ == "__main__":
     print("  Kehlen:   http://localhost:5050/?agent=kehlen")
     print("  Lucia:    http://localhost:5050/?agent=lucia")
     print("  ──────────────────────────────────────────────────────")
+    print("  Lookup:   http://localhost:5050/lookup")
     print("  Setup:    http://localhost:5050/setup")
     print("  Agents:   http://localhost:5050/agents")
     print("  Test pop: curl 'http://localhost:5050/webhook/test?agent=richard'\n")
