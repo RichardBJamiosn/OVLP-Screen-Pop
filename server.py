@@ -2201,6 +2201,25 @@ def recent():
 def update_version():
     return jsonify({"version": VERSION})
 
+@app.route("/update/install")
+def update_install():
+    """Returns a shell one-liner staff can pipe to bash — bypasses macOS Gatekeeper entirely.
+    Usage (paste in Terminal): curl -s http://192.168.0.103:5050/update/install | bash
+    """
+    script = r"""#!/bin/bash
+set -e
+INSTALL_DIR="$HOME/ovlp-pop"
+BASE="http://192.168.0.103:5050/update"
+echo "Downloading v$(curl -s $BASE/version | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"version\"])')..."
+curl -s "$BASE/server.py"      -o "$INSTALL_DIR/server.py"
+curl -s "$BASE/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
+lsof -ti:5050 | xargs kill -9 2>/dev/null; sleep 1
+cd "$INSTALL_DIR" && nohup python3 server.py >> server.log 2>&1 &
+sleep 3
+curl -s http://localhost:5050/ping | python3 -c "import sys,json; d=json.load(sys.stdin); print('Server running v'+d.get('version','?'))" 2>/dev/null || echo 'Server started'
+"""
+    return script, 200, {"Content-Type": "text/plain"}
+
 @app.route("/update/server.py")
 def update_server_py():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "server.py",
