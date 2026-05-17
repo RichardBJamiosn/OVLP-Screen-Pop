@@ -3,8 +3,49 @@ OVLP Screen Pop Server — ASSESS Framework (Maximum Free API Build)
 All data sources are free / no API key required.
 """
 
-import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl
+import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
+
+VERSION = "2.3"
+# Update sources: LAN (office) checked first, GitHub fallback for remote staff
+_UPDATE_LAN    = "http://192.168.0.103:5050"
+_UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
+
+
+def _auto_update():
+    """On startup: check for a newer version — LAN first, GitHub fallback.
+    If newer version found, replace local files and restart."""
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Try LAN first (fast, always current), then GitHub (works from home)
+    sources = [
+        (_UPDATE_LAN + "/update/version",    _UPDATE_LAN + "/update"),
+        (None,                               _UPDATE_GITHUB),   # GitHub: no version endpoint, always pull
+    ]
+
+    for version_url, base_url in sources:
+        try:
+            if version_url:
+                resp = urllib.request.urlopen(version_url, timeout=3)
+                remote = json.loads(resp.read()).get("version", "")
+                if not remote or remote == VERSION:
+                    return   # LAN reachable, already up to date
+                print(f"[update] v{remote} available via LAN (current {VERSION}) — updating...")
+            else:
+                print(f"[update] Pulling latest from GitHub...")
+
+            for fname in ("server.py", "dashboard.html"):
+                url = f"{base_url}/{fname}"
+                data = urllib.request.urlopen(url, timeout=20).read()
+                dest = os.path.join(this_dir, fname)
+                with open(dest + ".new", "wb") as f:
+                    f.write(data)
+                os.replace(dest + ".new", dest)
+                print(f"[update] ✓ {fname}")
+            print("[update] Restarting with updated files...")
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            continue  # Try next source
 
 # ─────────────────────────────────────────────
 # CONFIG  (ovlp_config.json in same folder)
@@ -948,16 +989,23 @@ def get_zoning(lat, lon):
                 full_desc = desc
                 if height: full_desc += f" | {height}"
                 label = f"{full_desc} — {source_name}" if full_desc else source_name
-                # Pull county land value from Franklin County parcel data (used as guardrail)
-                county_land_value = attrs.get("LNDVALUEBASE") or attrs.get("LNDVALUE") or 0
+                # Pull county assessed values — convert to true (100%) market value
+                county_land_value = float(attrs.get("LNDVALUEBASE") or attrs.get("LNDVALUE") or 0)
+                county_total_assessed = float(attrs.get("TOTVALUEBASE") or county_land_value or 0)
+                county_true_value = round(county_total_assessed / 0.35)
                 return {"zone": zone, "description": full_desc, "flag": flag, "cls": cls,
                         "label": label, "source": source_name,
-                        "county_land_value": float(county_land_value or 0)}
+                        "county_land_value": county_land_value,
+                        "county_true_value": county_true_value}
             elif desc and src_type == "franklin":
                 # No zone code but has classification description
                 residential = any(x in desc.upper() for x in ["RESID","VACANT LAND","LOT"])
+                county_land_value = float(attrs.get("LNDVALUEBASE") or attrs.get("LNDVALUE") or 0)
+                county_total_assessed = float(attrs.get("TOTVALUEBASE") or county_land_value or 0)
+                county_true_value = round(county_total_assessed / 0.35)
                 return {"zone": desc, "description": desc, "flag": desc.upper()[:30], "cls": "green" if residential else "yellow",
-                        "label": f"{desc} — {source_name}", "source": source_name}
+                        "label": f"{desc} — {source_name}", "source": source_name,
+                        "county_land_value": county_land_value, "county_true_value": county_true_value}
         except Exception as e:
             print(f"[zoning:{source_name}] {e}")
             continue
@@ -1059,7 +1107,10 @@ def get_comps(lat, lon, acreage, contact_comps=None):
             zipcd = (a.get("ZIPCD") or "").strip()
             sale_ts = a.get("SALEDATE")  # epoch ms from response
             classcd = str(a.get("CLASSCD") or "")
-            if not address or price < 500 or acres < 0.05:
+            # Tiny lot mode: relax acre floor for sub-0.1 acre subjects
+            tiny_lot = subject_acres > 0 and subject_acres < 0.1
+            acre_floor = 0.01 if tiny_lot else 0.05
+            if not address or price < 500 or acres < acre_floor:
                 skip_basic += 1; continue
             # Classcd filtering depends on search mode:
             # Strict (vacant land found): only keep 400/500/501
@@ -1075,11 +1126,12 @@ def get_comps(lat, lon, acreage, contact_comps=None):
                     # Strict: exclude everything except vacant land
                     if (100 <= cd <= 199) or (401 <= cd <= 499) or (510 <= cd <= 599):
                         skip_classcd += 1; continue
-            # Filter: acreage within 5x or 1/5 of subject
-            # Tighter than before — tiny urban lots ($860k/ac) aren't comparable to 0.7ac parcels
+            # Filter: acreage ratio — widen for tiny lots (<0.1ac) to 10x/0.1x
             if subject_acres > 0:
                 ratio = acres / subject_acres
-                if ratio > 5 or ratio < 0.2:
+                max_ratio = 10 if tiny_lot else 5
+                min_ratio = 0.1 if tiny_lot else 0.2
+                if ratio > max_ratio or ratio < min_ratio:
                     skip_ratio += 1; continue
             per_acre = int(price / acres) if acres else 0
             # Sanity cap for non-vacant codes that slipped past classcd filter.
@@ -1104,6 +1156,49 @@ def get_comps(lat, lon, acreage, contact_comps=None):
                 "zillow": zillow_url,
                 "google": google_url,
             })
+
+        # Last resort for tiny lots: if 0 comps, allow houses (510) as land proxies
+        # Use sale price directly — these are lot-value indicators for urban parcels
+        if not results and tiny_lot and features:
+            print(f"[comps] tiny lot fallback — allowing houses (510) as land proxies")
+            for feat in features:
+                a = feat.get("attributes", {})
+                raw_area = a.get("STATEDAREA") or 0
+                acres_f = raw_area / 43560.0 if raw_area > 100 else float(raw_area)
+                price_f = a.get("SALEPRICE") or 0
+                address_f = (a.get("SITEADDRESS") or "").strip()
+                zipcd_f = (a.get("ZIPCD") or "").strip()
+                sale_ts_f = a.get("SALEDATE")
+                classcd_f = str(a.get("CLASSCD") or "")
+                if not address_f or price_f < 500 or acres_f < 0.01:
+                    continue
+                # Only take 510 (houses) — closest proxy for urban lot value
+                if classcd_f != "510":
+                    continue
+                # Acreage ratio: within 3x of subject for tighter relevance
+                if subject_acres > 0:
+                    r = acres_f / subject_acres
+                    if r > 3 or r < 0.33:
+                        continue
+                per_acre_f = int(price_f / acres_f) if acres_f else 0
+                sale_date_f = ""
+                if sale_ts_f:
+                    sale_date_f = datetime.datetime.utcfromtimestamp(sale_ts_f / 1000).strftime("%Y-%m-%d")
+                addr_slug_f = address_f.replace(" ", "-").replace(",", "").replace(".", "")
+                results.append({
+                    "address": address_f,
+                    "acres": round(float(acres_f), 2),
+                    "date": sale_date_f,
+                    "price": price_f,
+                    "per_acre": per_acre_f,
+                    "zillow": f"https://www.zillow.com/homes/{addr_slug_f}-Columbus-OH-{zipcd_f}_rb/",
+                    "google": f"https://maps.google.com/?q={urllib.parse.quote(address_f + ' Columbus OH ' + zipcd_f)}",
+                    "source": "house_proxy",
+                })
+            # Sort by price (lowest = most conservative land value estimate)
+            results = sorted(results, key=lambda c: c["price"])[:5]
+            if results:
+                print(f"[comps] house proxy: {len(results)} comps from 510 sales, prices: {[c['price'] for c in results]}")
 
         # Select 2 below avg + 1 above avg (bracketing: conservative bias)
         extra = []
@@ -1151,11 +1246,13 @@ def get_comps(lat, lon, acreage, contact_comps=None):
             return {"comps": [], "flag": "NO COMPS", "cls": "grey", "label": "No recent vacant land sales found nearby"}
 
         avg_per_acre = int(sum(c["per_acre"] for c in results) / len(results)) if results else 0
-        print(f"[comps] returning {len(results)} comps (+{len(extra)} extra), avg_per_acre=${avg_per_acre:,}")
+        avg_price    = int(sum(c["price"]    for c in results) / len(results)) if results else 0
+        print(f"[comps] returning {len(results)} comps (+{len(extra)} extra), avg_per_acre=${avg_per_acre:,}, avg_price=${avg_price:,}")
         return {
             "comps": results,
             "extra": extra,
             "avg_per_acre": avg_per_acre,
+            "avg_price": avg_price,
             "flag": f"${avg_per_acre:,}/ACRE AVG",
             "cls": "green",
             "label": f"{len(results)} comps — avg ${avg_per_acre:,}/acre"
@@ -1386,6 +1483,16 @@ def enrich_property(prop_address, city_state, contact):
 # CONTACT NORMALIZER
 # ─────────────────────────────────────────────
 
+def _ohio_true_value(raw_val):
+    """Format county market value for display. GHL/REISkip already stores 100% appraised value."""
+    try:
+        v = float(str(raw_val or "0").replace(",","").replace("$","").strip())
+        if v > 0:
+            return f"${int(v):,}"
+    except Exception:
+        pass
+    return str(raw_val or "")
+
 def build_contact(raw):
     cf = raw.get("customField", {}) or {}
     return {
@@ -1394,7 +1501,7 @@ def build_contact(raw):
         "property_address": cf.get("property_address") or raw.get("Property Address",""),
         "zip_code":         raw.get("postalCode") or cf.get("zip_code") or raw.get("ZIP Code",""),
         "acreage":          cf.get("acreage")    or raw.get("Acreage",""),
-        "market_value":     cf.get("total_market_value") or raw.get("Total Market Value",""),
+        "market_value":     _ohio_true_value(cf.get("total_market_value") or raw.get("Total Market Value","")),
         "cma_value":        cf.get("cma_comp_value") or raw.get("CMA Comp Value",""),
         "cma_low":          cf.get("cma_low")  or raw.get("CMA Low",""),
         "cma_high":         cf.get("cma_high") or raw.get("CMA High",""),
@@ -1635,15 +1742,33 @@ def _enrich_and_push(contact):
     # Rep sees score ring + offer range without waiting for Overpass (OSM data)
     assess_pre     = calc_assess_score(store, contact)
     escalations_pre= build_escalations(store, contact)
-    # Offer range: GHL CMA first, fall back to live comps avg_per_acre × acreage
+    # Offer range: GHL CMA first, fall back to live comps
     cma = contact.get("cma_value")
     if not cma:
-        comp_data = store.get("comps", {})
+        comp_data    = store.get("comps", {})
         avg_per_acre = comp_data.get("avg_per_acre", 0)
+        avg_price    = comp_data.get("avg_price", 0)
         try: ac = float(acreage) if acreage else 0
         except: ac = 0
-        if avg_per_acre and ac:
+        if ac > 0 and ac < 0.2 and avg_price:
+            # Tiny lots: $/acre × acreage is meaningless — a 0.05ac lot ≠ half a 0.10ac lot.
+            # Use average comp PRICE directly (all comps are similarly small urban lots).
+            cma = avg_price
+            print(f"[offer] tiny lot ({ac}ac) — using avg comp price ${avg_price:,} instead of $/acre")
+        elif avg_per_acre and ac:
             cma = avg_per_acre * ac
+    # Guardrail: cap CMA at 3× true market value — prevents tiny-lot $/ac inflation
+    if cma:
+        mv = 0.0
+        try:
+            mv = float(str(contact.get("market_value") or "0").replace(",","").replace("$",""))
+        except Exception:
+            pass
+        if not mv:
+            mv = float(store.get("zoning", {}).get("county_true_value", 0) or 0)
+        if mv > 0 and float(cma) > mv * 3:
+            print(f"[offer] CMA ${float(cma):,.0f} > 3× market value ${mv:,.0f} — capping at ${mv*2:,.0f}")
+            cma = mv * 2
     offer          = calc_offer_range(cma)
     store["assess"]      = assess_pre
     store["escalations"] = escalations_pre
@@ -2068,7 +2193,26 @@ def recent():
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
     return jsonify(history)
 
+# ─────────────────────────────────────────────
+# AUTO-UPDATE ROUTES  (Richard's machine serves these to staff)
+# ─────────────────────────────────────────────
+
+@app.route("/update/version")
+def update_version():
+    return jsonify({"version": VERSION})
+
+@app.route("/update/server.py")
+def update_server_py():
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "server.py",
+                               mimetype="text/plain")
+
+@app.route("/update/dashboard.html")
+def update_dashboard_html():
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "dashboard.html",
+                               mimetype="text/html")
+
 if __name__ == "__main__":
+    _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
     _pop_history.extend(_load_pop_history())
     # Build phone index in background so startup isn't blocked
     threading.Thread(target=_build_phone_index, daemon=True).start()
