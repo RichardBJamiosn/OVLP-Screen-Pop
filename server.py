@@ -6,7 +6,8 @@ All data sources are free / no API key required.
 import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-VERSION = "2.5"
+VERSION = "2.6"
+COMP_PROMPT_VERSION = "3.0"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
 _UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
@@ -34,7 +35,7 @@ def _auto_update():
             else:
                 print(f"[update] Pulling latest from GitHub...")
 
-            for fname in ("server.py", "dashboard.html"):
+            for fname in ("server.py", "dashboard.html", "comp_prompt.md"):
                 url = f"{base_url}/{fname}"
                 data = urllib.request.urlopen(url, timeout=20).read()
                 dest = os.path.join(this_dir, fname)
@@ -2199,7 +2200,7 @@ def recent():
 
 @app.route("/update/version")
 def update_version():
-    return jsonify({"version": VERSION})
+    return jsonify({"version": VERSION, "comp_prompt_version": COMP_PROMPT_VERSION})
 
 @app.route("/update/install")
 def update_install():
@@ -2214,6 +2215,7 @@ VER=$(curl -s $BASE/version | python3 -c 'import sys,json; print(json.load(sys.s
 echo "Downloading v${VER}..."
 curl -s "$BASE/server.py"      -o "$INSTALL_DIR/server.py"
 curl -s "$BASE/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
+curl -s "$BASE/comp_prompt.md" -o "$INSTALL_DIR/comp_prompt.md"
 lsof -ti:5050 | xargs kill -9 2>/dev/null; sleep 1
 cd "$INSTALL_DIR" && nohup python3 server.py >> server.log 2>&1 &
 sleep 3
@@ -2230,6 +2232,11 @@ def update_server_py():
 def update_dashboard_html():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "dashboard.html",
                                mimetype="text/html")
+
+@app.route("/update/comp_prompt.md")
+def update_comp_prompt():
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "comp_prompt.md",
+                               mimetype="text/plain")
 
 if __name__ == "__main__":
     _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
@@ -2255,3 +2262,4 @@ if __name__ == "__main__":
     else:
         print("  WARNING: no cert found, running HTTP\n")
     app.run(host="0.0.0.0", port=5050, debug=False, threaded=True, ssl_context=ssl_ctx)
+
