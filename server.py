@@ -2156,6 +2156,29 @@ def lookup_api():
 @app.route("/ping")
 def ping(): return jsonify({"status":"running","apis":13,"time":time.time()})
 
+@app.route("/debug/last-contact")
+def debug_last_contact():
+    slug = request.args.get("agent", "broadcast")
+    state = _last_state.get(slug, {})
+    contact_evt = state.get("contact", {})
+    data = contact_evt.get("data", {}) if isinstance(contact_evt, dict) else {}
+    keys = ["owner_name","last_sale_date","last_sale_price","annual_tax","tax_delinquent","delinquent_year","total_owed","market_value","parcel_id"]
+    return jsonify({"fields": {k: data.get(k, "NOT PRESENT") for k in keys}, "all_data": data})
+
+@app.route("/debug/fetch-contact")
+def debug_fetch_contact():
+    """Fetch a GHL contact and return the raw + build_contact output for debugging."""
+    cid = request.args.get("contact_id", "").strip()
+    if not cid: return jsonify({"error": "missing contact_id"}), 400
+    raw, err = fetch_ghl_contact(cid)
+    if raw is None: return jsonify({"error": err}), 503
+    contact = build_contact(raw)
+    return jsonify({
+        "raw_customField": raw.get("customField", {}),
+        "raw_bridged": {k: raw.get(k,"") for k in ["Last Sale Date","Last Sale Price","Annual Tax","Total Owed"]},
+        "build_contact_output": {k: contact.get(k,"") for k in ["last_sale_date","last_sale_price","annual_tax","total_owed","market_value","parcel_id","owner_name"]},
+    })
+
 @app.route("/recent")
 def recent():
     """Last 5 pops — diagnostic endpoint. Hit this after SSHing in to see what happened."""
