@@ -2275,7 +2275,7 @@ def comp_prompt_page():
 <div>{escaped}</div>
 </body>
 </html>"""
-    return page, 200, {{"Content-Type": "text/html"}}
+    return page, 200, {"Content-Type": "text/html"}
 
 if __name__ == "__main__":
     _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
