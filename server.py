@@ -2267,6 +2267,11 @@ def update_comp_prompt():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "comp_prompt.md",
                                mimetype="text/plain")
 
+@app.route("/comp-report")
+def comp_report_page():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    return send_from_directory(this_dir, "comp_report.html")
+
 @app.route("/comp-prompt")
 def comp_prompt_page():
     this_dir = os.path.dirname(os.path.abspath(__file__))
