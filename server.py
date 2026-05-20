@@ -35,7 +35,7 @@ def _auto_update():
             else:
                 print(f"[update] Pulling latest from GitHub...")
 
-            for fname in ("server.py", "dashboard.html", "comp_prompt.md"):
+            for fname in ("server.py", "dashboard.html", "comp_prompt.md", "comp_report.html"):
                 url = f"{base_url}/{fname}"
                 data = urllib.request.urlopen(url, timeout=20).read()
                 dest = os.path.join(this_dir, fname)
