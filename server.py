@@ -2238,6 +2238,45 @@ def update_comp_prompt():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "comp_prompt.md",
                                mimetype="text/plain")
 
+@app.route("/comp-prompt")
+def comp_prompt_page():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        with open(os.path.join(this_dir, "comp_prompt.md")) as f:
+            raw = f.read()
+    except FileNotFoundError:
+        raw = "comp_prompt.md not found — run Update.command to get the latest files."
+    # Escape for HTML, preserve code blocks and line breaks
+    import html as html_mod
+    escaped = html_mod.escape(raw)
+    # Style code fences as <pre> blocks
+    import re as re_mod
+    escaped = re_mod.sub(r'```(.*?)```', r'<pre>\1</pre>', escaped, flags=re_mod.DOTALL)
+    escaped = escaped.replace('\n', '<br>')
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Land Comp Prompt v{COMP_PROMPT_VERSION} — OVLP</title>
+<style>
+  body{{background:#0f0f1a;color:#e0e0f0;font-family:'Segoe UI',system-ui,sans-serif;max-width:860px;margin:40px auto;padding:0 24px;line-height:1.7}}
+  h1{{color:#a78bfa;font-size:1.4em;border-bottom:1px solid #2a2a40;padding-bottom:12px}}
+  .version{{background:#1a1a2e;border:1px solid #a78bfa44;border-radius:8px;padding:8px 16px;display:inline-block;color:#a78bfa;font-weight:700;margin-bottom:24px}}
+  pre{{background:#111122;border:1px solid #2a2a40;border-radius:10px;padding:20px;white-space:pre-wrap;word-break:break-word;font-size:.88em;color:#c8d0e0;overflow-x:auto;line-height:1.6}}
+  .back{{color:#4a9eff;text-decoration:none;font-size:.9em}}
+  .back:hover{{text-decoration:underline}}
+</style>
+</head>
+<body>
+<p><a class="back" href="javascript:history.back()">← Dashboard</a></p>
+<h1>Land Comp Report Prompt</h1>
+<div class="version">Version {COMP_PROMPT_VERSION}</div>
+<div>{escaped}</div>
+</body>
+</html>"""
+    return page, 200, {{"Content-Type": "text/html"}}
+
 if __name__ == "__main__":
     _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
     _pop_history.extend(_load_pop_history())
