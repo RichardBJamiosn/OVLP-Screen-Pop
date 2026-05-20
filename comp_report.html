@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OVLP · Comp Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #0d0e19;
+  --surface: #12131e;
+  --card:    #171828;
+  --raised:  #1c1d2e;
+  --rule:    rgba(255,255,255,0.07);
+  --rule-h:  rgba(255,255,255,0.04);
+  --text:    #eef0ff;
+  --text-2:  #bcc2e4;
+  --muted:   #757da8;
+  --subtle:  #4e5472;
+  --accent:  #8280ff;
+  --green:   #2bd665;
+  --red:     #ff4f5e;
+  --yellow:  #ffc025;
+  --orange:  #ff7043;
+  --teal:    #4db6f4;
+  --purple:  #b89fff;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ─── TOPBAR ─── */
+#topbar {
+  height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 22px; background: rgba(8,9,16,.97);
+  border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(20px); font-size: 11.5px;
+}
+.tbar-brand { font-weight: 800; letter-spacing: .07em; color: var(--accent); font-size: 12px; }
+.tbar-sep { color: var(--subtle); }
+#tbar-addr { color: var(--text-2); font-weight: 500; max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tflex { flex: 1; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #333; }
+.dot.on { background: var(--green); box-shadow: 0 0 5px var(--green); }
+#tbar-st { color: var(--muted); }
+.spin { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.07); border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; vertical-align: middle; }
+@keyframes sp { to { transform: rotate(360deg); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+/* ─── PAGE ─── */
+#page { max-width: 980px; margin: 0 auto; padding: 24px 24px 60px; }
+
+/* ─── WAITING ─── */
+#waiting { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 68vh; gap: 14px; color: var(--muted); }
+#waiting h2 { font-size: 15px; font-weight: 600; color: var(--text-2); }
+#waiting p { font-size: 12px; }
+.wait-ring { width: 42px; height: 42px; border: 3px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: sp 1.1s linear infinite; }
+#waiting.hidden { display: none; }
+
+/* ─── REPORT ─── */
+#report { display: none; animation: fadeUp .35s ease; }
+
+/* ─── REPORT HEADER ─── */
+#rpt-banner {
+  background: var(--card); border: 1px solid var(--rule);
+  border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+.rb-left {}
+.rb-eyebrow { font-size: 9.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+.rb-addr { font-size: 17px; font-weight: 800; color: var(--text); }
+.rb-parcel { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.rb-right { text-align: right; flex-shrink: 0; }
+.priority-pill {
+  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; padding: 4px 12px; border-radius: 20px; border: 1px solid;
+}
+.priority-pill.t1 { color: var(--red);    background: rgba(255,79,94,.12);  border-color: rgba(255,79,94,.3); }
+.priority-pill.t2 { color: var(--yellow); background: rgba(255,192,37,.12); border-color: rgba(255,192,37,.3); }
+.priority-pill.t3 { color: var(--muted);  background: rgba(117,125,168,.1); border-color: rgba(117,125,168,.2); }
+.rb-score { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* ─── SECTION ─── */
+.sec { margin-bottom: 24px; }
+.sec-hd {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 9px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--muted); padding-bottom: 7px; border-bottom: 1px solid var(--rule);
+  margin-bottom: 14px;
+}
+.sec-hd .ph { color: var(--subtle); }
+.sec-hd .tag {
+  margin-left: auto; font-size: 9.5px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; letter-spacing: .04em; text-transform: none;
+}
+.tag.green  { color: var(--green);  background: rgba(43,214,101,.1);  border: 1px solid rgba(43,214,101,.2); }
+.tag.yellow { color: var(--yellow); background: rgba(255,192,37,.1);  border: 1px solid rgba(255,192,37,.2); }
+.tag.red    { color: var(--red);    background: rgba(255,79,94,.1);   border: 1px solid rgba(255,79,94,.2); }
+.tag.grey   { color: var(--muted);  background: rgba(117,125,168,.08);border: 1px solid rgba(117,125,168,.15); }
+.tag.accent { color: var(--accent); background: rgba(130,128,255,.1); border: 1px solid rgba(130,128,255,.2); }
+.tag.orange { color: var(--orange); background: rgba(255,112,67,.1);  border: 1px solid rgba(255,112,67,.2); }
+
+/* ─── AUDIT GRID ─── */
+.audit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.audit-item {
+  background: var(--raised); border: 1px solid var(--rule-h);
+  border-radius: 8px; padding: 10px 13px;
+  display: flex; gap: 9px; align-items: flex-start;
+}
+.audit-item.risk-red    { background: rgba(255,79,94,.06);  border-color: rgba(255,79,94,.2); }
+.audit-item.risk-yellow { background: rgba(255,192,37,.06); border-color: rgba(255,192,37,.2); }
+.audit-item.risk-green  { background: rgba(43,214,101,.04); border-color: rgba(43,214,101,.15); }
+.ai-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.ai-dot.green  { background: var(--green); }
+.ai-dot.yellow { background: var(--yellow); }
+.ai-dot.red    { background: var(--red); }
+.ai-dot.grey   { background: #444; }
+.ai-label { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ai-val   { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.risk-banner {
+  grid-column: 1 / -1;
+  background: rgba(255,79,94,.1); border: 1px solid rgba(255,79,94,.3);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12px; font-weight: 700; color: var(--red); letter-spacing: .04em;
+}
+
+/* ─── MOTIVATION BAR ─── */
+.motiv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 8px; }
+.motiv-item {
+  background: var(--raised); border: 1px solid var(--rule-h);
+  border-radius: 8px; padding: 10px 13px;
+}
+.mi-label { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.mi-val { font-size: 13px; font-weight: 600; }
+.mi-val.red    { color: var(--red); }
+.mi-val.yellow { color: var(--yellow); }
+.mi-val.green  { color: var(--green); }
+.mi-val.muted  { color: var(--muted); font-style: italic; }
+.mi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.motiv-score-bar { margin-top: 12px; }
+.msb-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.msb-track { height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+.msb-fill  { height: 100%; border-radius: 3px; transition: width .6s ease; }
+
+/* ─── TABLES ─── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table thead tr { border-bottom: 2px solid var(--rule); }
+.data-table th {
+  text-align: left; padding: 6px 10px 8px;
+  font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.data-table tbody tr { border-bottom: 1px solid var(--rule-h); }
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table tbody tr:hover td { background: rgba(255,255,255,0.012); }
+.data-table td { padding: 9px 10px; color: var(--text-2); vertical-align: middle; }
+.data-table .t-num  { color: var(--subtle); font-size: 11px; width: 28px; }
+.data-table .t-addr { color: var(--text); font-weight: 600; }
+.data-table .t-addr a { color: var(--accent); }
+.data-table .t-money { color: var(--green); font-weight: 700; }
+.data-table .t-perac { color: var(--accent); font-weight: 700; }
+.data-table .t-dom   { color: var(--muted); font-size: 12px; }
+.data-table .t-maps  { color: var(--teal); font-size: 11px; }
+.data-table .t-parcel { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--subtle); }
+.data-table tfoot tr { border-top: 2px solid var(--rule); }
+.data-table tfoot td { font-weight: 700; padding: 9px 10px; }
+.tr-avg { background: rgba(130,128,255,.04); }
+.tr-avg td { color: var(--accent); }
+.tr-med { background: rgba(43,214,101,.04); }
+.tr-med td { color: var(--green); }
+.tr-extra td { opacity: .6; }
+.empty-row td { text-align: center; padding: 20px; color: var(--muted); font-style: italic; }
+
+/* ─── ACTIVE REMINDER ─── */
+.active-callout {
+  background: rgba(255,192,37,.05); border: 1px solid rgba(255,192,37,.2);
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;
+  font-size: 12.5px; color: var(--text-2); line-height: 1.65;
+}
+.active-callout strong { color: var(--yellow); }
+.link-btn {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 12px;
+  border-radius: 6px; background: rgba(130,128,255,.15); border: 1px solid rgba(130,128,255,.3);
+  color: var(--accent); margin: 4px 4px 0 0;
+}
+.link-btn:hover { background: rgba(130,128,255,.25); text-decoration: none; }
+.link-btn.yellow-btn { background: rgba(255,192,37,.1); border-color: rgba(255,192,37,.3); color: var(--yellow); }
+.link-btn.teal-btn   { background: rgba(77,182,244,.1); border-color: rgba(77,182,244,.3); color: var(--teal); }
+
+/* ─── KV CARDS ─── */
+.kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kv {
+  background: var(--raised); border: 1px solid var(--rule-h);
+  border-radius: 8px; padding: 12px 14px;
+}
+.kv-label { font-size: 9.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.kv-val { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.kv-val.green  { color: var(--green); }
+.kv-val.accent { color: var(--accent); }
+.kv-val.yellow { color: var(--yellow); }
+.kv-val.orange { color: var(--orange); }
+.kv-val.red    { color: var(--red); }
+.kv-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* ─── OFFER CALC TABLE ─── */
+.offer-calc { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0; }
+.offer-calc td { padding: 9px 14px; border-bottom: 1px solid var(--rule-h); }
+.offer-calc tr:last-child td { border-bottom: none; }
+.offer-calc .oc-label { color: var(--text-2); }
+.offer-calc .oc-val   { text-align: right; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.offer-calc .oc-val.red { color: var(--red); }
+.offer-calc .oc-val.green { color: var(--green); }
+.offer-calc .oc-sub { font-size: 11px; color: var(--muted); }
+.offer-calc tr.total-row td { border-top: 2px solid var(--rule); background: rgba(43,214,101,.05); }
+.offer-calc tr.total-row .oc-label { color: var(--text); font-weight: 800; font-size: 13.5px; letter-spacing: .04em; }
+.offer-calc tr.total-row .oc-val   { color: var(--green); font-size: 17px; }
+.offer-calc tr.warn-row td { background: rgba(255,112,67,.05); }
+.offer-calc tr.warn-row .oc-val { color: var(--orange); }
+
+/* ─── OFFER SCENARIOS ─── */
+.scenarios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.scenario {
+  background: var(--raised); border: 1px solid var(--rule-h);
+  border-radius: 9px; padding: 14px 16px;
+}
+.scenario.sc-low  { background: rgba(43,214,101,.05);  border-color: rgba(43,214,101,.2); }
+.scenario.sc-work { background: rgba(130,128,255,.05); border-color: rgba(130,128,255,.2); }
+.scenario.sc-agg  { background: rgba(255,112,67,.05);  border-color: rgba(255,112,67,.2); }
+.sc-name  { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.scenario.sc-low  .sc-name { color: var(--green); }
+.scenario.sc-work .sc-name { color: var(--accent); }
+.scenario.sc-agg  .sc-name { color: var(--orange); }
+.sc-offer { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+.scenario.sc-low  .sc-offer { color: var(--green); }
+.scenario.sc-work .sc-offer { color: var(--accent); }
+.scenario.sc-agg  .sc-offer { color: var(--orange); }
+.sc-pct   { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.sc-note  { font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
+
+/* ─── VERDICT ─── */
+#verdict {
+  border-radius: 10px; padding: 18px 20px; display: none; border: 1px solid;
+}
+#verdict.buy       { background: rgba(43,214,101,.07);  border-color: rgba(43,214,101,.25); }
+#verdict.negotiate { background: rgba(255,192,37,.07);  border-color: rgba(255,192,37,.25); }
+#verdict.pass      { background: rgba(255,79,94,.07);   border-color: rgba(255,79,94,.25); }
+.vd-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.vd-icon { font-size: 24px; }
+.vd-title { font-size: 15px; font-weight: 800; }
+.vd-title.buy       { color: var(--green); }
+.vd-title.negotiate { color: var(--yellow); }
+.vd-title.pass      { color: var(--red); }
+.vd-body { font-size: 13px; color: var(--text-2); line-height: 1.7; }
+.vd-body p { margin-bottom: 7px; }
+.vd-body p:last-child { margin-bottom: 0; }
+.vd-body strong { color: var(--text); }
+.vd-pts { list-style: none; margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.vd-pts li::before { content: '→  '; color: var(--subtle); }
+
+/* ─── CHECKLIST (for manual phases) ─── */
+.checklist { display: flex; flex-direction: column; gap: 6px; }
+.cl-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--raised); border: 1px solid var(--rule-h);
+  border-radius: 7px; padding: 9px 13px; font-size: 12.5px; color: var(--text-2); line-height: 1.5;
+}
+.cl-check { flex-shrink: 0; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--subtle); margin-top: 1px; }
+
+/* ─── DIVIDER ─── */
+.divider { height: 1px; background: var(--rule); margin: 20px 0; }
+
+/* ─── FOOTER ─── */
+#rpt-footer { font-size: 11px; color: var(--subtle); text-align: right; margin-top: 24px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="tbar-brand">OVLP</span>
+  <span class="tbar-sep">·</span>
+  <span id="tbar-addr">Comp Report</span>
+  <div class="tflex"></div>
+  <div class="dot" id="dot"></div>&nbsp;
+  <span id="tbar-st">connecting…</span>
+</div>
+
+<div id="page">
+
+  <div id="waiting">
+    <div class="wait-ring"></div>
+    <h2>Waiting for Contact Pop</h2>
+    <p>Updates automatically when a call comes in on the main dashboard.</p>
+  </div>
+
+  <div id="report">
+
+    <!-- BANNER -->
+    <div id="rpt-banner">
+      <div class="rb-left">
+        <div class="rb-eyebrow">OVLP Wholesale · Comp Report</div>
+        <div class="rb-addr" id="rb-addr">—</div>
+        <div class="rb-parcel" id="rb-parcel">—</div>
+      </div>
+      <div class="rb-right">
+        <div class="priority-pill t3" id="rb-priority">—</div>
+        <div class="rb-score" id="rb-score"></div>
+      </div>
+    </div>
+
+    <!-- ── PHASE 1 — PROPERTY QUALITY AUDIT ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 1</span>&nbsp;·&nbsp;Property Quality Audit
+        <span class="tag grey" id="audit-tag">Loading…</span>
+      </div>
+      <div class="audit-grid" id="audit-grid">
+        <div class="audit-item"><div class="ai-dot grey"></div><div><div class="ai-label">Loading</div><div class="ai-val"><span class="spin"></span></div></div></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── SELLER MOTIVATION ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        Seller Motivation
+        <span class="tag grey" id="motiv-tag">—</span>
+      </div>
+      <div class="motiv-grid" id="motiv-grid"></div>
+      <div class="motiv-score-bar">
+        <div class="msb-label"><span>Motivation Score</span><span id="motiv-score-num">—</span></div>
+        <div class="msb-track"><div class="msb-fill" id="motiv-bar" style="width:0%;background:var(--muted)"></div></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 2 — SOLD COMPS ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 2</span>&nbsp;·&nbsp;Sold Comps
+        <span class="tag grey" id="sold-tag">Loading…</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="t-num">#</th>
+            <th>Address</th>
+            <th>Parcel</th>
+            <th>Lot (ac)</th>
+            <th>Sale Date</th>
+            <th>Sale Price</th>
+            <th>$/Acre</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sold-body">
+          <tr><td colspan="8" style="text-align:center;padding:18px;color:var(--muted)"><span class="spin"></span> Pulling Franklin County ArcGIS…</td></tr>
+        </tbody>
+        <tfoot id="sold-foot"></tfoot>
+      </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 3 — ACTIVE LISTINGS ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 3</span>&nbsp;·&nbsp;Active Listings
+        <span class="tag yellow" id="active-tag">Manual Step</span>
+      </div>
+      <div class="active-callout">
+        <strong>⚠ Manual Pull Required</strong> — Active listings cannot be fetched automatically. Open these now and pull the top 5 active comps (same acreage range, same radius).<br><br>
+        <strong>Rule:</strong> To sell fast you must be the <strong>cheapest $/acre</strong> in the area. Target list price = 5–15% below the lowest active comp.<br><br>
+        <a class="link-btn" id="link-zillow" href="#" target="_blank">Zillow Active Listings ↗</a>
+        <a class="link-btn yellow-btn" id="link-landwatch" href="#" target="_blank">LandWatch ↗</a>
+        <a class="link-btn teal-btn" id="link-regrid" href="#" target="_blank">Regrid ↗</a>
+        <a class="link-btn" id="link-land-portal" href="https://getlandportal.com" target="_blank">Land Portal ↗</a>
+      </div>
+      <div class="checklist">
+        <div class="cl-item"><div class="cl-check"></div><span>Lowest active listing price/acre: <strong>$_____ /ac</strong></span></div>
+        <div class="cl-item"><div class="cl-check"></div><span>How many active listings in area? <strong>_____</strong></span></div>
+        <div class="cl-item"><div class="cl-check"></div><span>Are listings sitting (60+ DOM) or moving fast? <strong>_____</strong></span></div>
+        <div class="cl-item"><div class="cl-check"></div><span>Any pending/backup listings at lower price? <strong>_____</strong></span></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 4 — REDFIN SANITY CHECK ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 4</span>&nbsp;·&nbsp;Redfin Sanity Check
+        <span class="tag yellow" id="redfin-tag">Manual Step</span>
+      </div>
+      <div class="active-callout" style="background:rgba(77,182,244,.04);border-color:rgba(77,182,244,.2)">
+        <strong style="color:var(--teal)">Redfin Quick-Offer Formula:</strong> Redfin Estimate ÷ 2 = Quick Offer Benchmark<br>
+        Validates your Phase 2/3 math. If Redfin-based offer and Zillow-based offer are &gt;20% apart, flag it.<br><br>
+        <a class="link-btn teal-btn" id="link-redfin" href="#" target="_blank">Open in Redfin ↗</a>
+      </div>
+      <div class="kv-grid">
+        <div class="kv">
+          <div class="kv-label">Redfin Estimate</div>
+          <div class="kv-val teal" id="rf-est" style="color:var(--teal)">Paste manually</div>
+          <div class="kv-sub">from Redfin.com</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Redfin ÷ 2 Benchmark</div>
+          <div class="kv-val" id="rf-bench" style="color:var(--teal)">—</div>
+          <div class="kv-sub">quick-offer sanity check</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Zillow-Based Offer</div>
+          <div class="kv-val accent" id="rf-zillow-offer">—</div>
+          <div class="kv-sub">from Phase 6 calc (45%)</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Variance</div>
+          <div class="kv-val" id="rf-variance" style="color:var(--muted)">—</div>
+          <div class="kv-sub">flag if &gt;20% difference</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 5 — VALUATION ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 5</span>&nbsp;·&nbsp;Valuation
+        <span class="tag accent" id="val-tag">—</span>
+      </div>
+      <div class="kv-grid">
+        <div class="kv">
+          <div class="kv-label">Sold Baseline</div>
+          <div class="kv-val accent" id="v-baseline"><span class="spin"></span></div>
+          <div class="kv-sub">lower of avg vs median $/ac</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Subject Acreage</div>
+          <div class="kv-val" id="v-acres"><span class="spin"></span></div>
+          <div class="kv-sub">from contact record</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Conservative Retail</div>
+          <div class="kv-val green" id="v-retail"><span class="spin"></span></div>
+          <div class="kv-sub">sold baseline × acres</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Quick-Sale (60-day)</div>
+          <div class="kv-val accent" id="v-quicksale"><span class="spin"></span></div>
+          <div class="kv-sub">retail – 10%, undercut market</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">County Market Value</div>
+          <div class="kv-val yellow" id="v-mkt"><span class="spin"></span></div>
+          <div class="kv-sub">auditor assessed</div>
+        </div>
+        <div class="kv">
+          <div class="kv-label">Avg $/Acre (Sold)</div>
+          <div class="kv-val" id="v-avg" style="color:var(--text-2)"><span class="spin"></span></div>
+          <div class="kv-sub" id="v-avg-sub">from comps</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 6 — OFFER CALCULATOR ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 6</span>&nbsp;·&nbsp;Offer Calculator
+        <span class="tag green" id="offer-tag">—</span>
+      </div>
+
+      <table class="offer-calc">
+        <tbody>
+          <tr>
+            <td class="oc-label">Quick-Sale Target Price (60-day)</td>
+            <td class="oc-val green" id="oc-qs">—</td>
+          </tr>
+          <tr>
+            <td class="oc-label">Target Profit<div class="oc-sub">minimum acceptable margin</div></td>
+            <td class="oc-val red">− $10,000</td>
+          </tr>
+          <tr>
+            <td class="oc-label">Realtor Commission (10%)<div class="oc-sub">of quick-sale price</div></td>
+            <td class="oc-val red" id="oc-realtor">— </td>
+          </tr>
+          <tr>
+            <td class="oc-label">Closing Costs (est.)</td>
+            <td class="oc-val red">− $2,500</td>
+          </tr>
+          <tr>
+            <td class="oc-label">Photos / Marketing</td>
+            <td class="oc-val red">− $500</td>
+          </tr>
+          <tr>
+            <td class="oc-label">Unknown Buffer</td>
+            <td class="oc-val red">− $1,000</td>
+          </tr>
+          <tr class="total-row">
+            <td class="oc-label">MAXIMUM ALLOWABLE OFFER</td>
+            <td class="oc-val green" id="oc-mao">—</td>
+          </tr>
+          <tr class="warn-row" id="oc-check-row">
+            <td class="oc-label">MAO as % of Quick-Sale Price<div class="oc-sub" id="oc-check-note">Must be ≤ 50% — flag if over</div></td>
+            <td class="oc-val orange" id="oc-pct">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="scenarios" id="scenarios">
+        <div class="scenario sc-low">
+          <div class="sc-name">Lowball</div>
+          <div class="sc-offer" id="sc-low">—</div>
+          <div class="sc-pct" id="sc-low-pct">35% of retail</div>
+          <div class="sc-note">Use when seller is highly motivated — tax delinquent, distressed, absentee. Expect pushback. Plant the anchor.</div>
+        </div>
+        <div class="scenario sc-work">
+          <div class="sc-name">Working Offer</div>
+          <div class="sc-offer" id="sc-work">—</div>
+          <div class="sc-pct" id="sc-work-pct">45% of retail</div>
+          <div class="sc-note">Standard starting point. Leaves room to negotiate up to MAO while still protecting your margin.</div>
+        </div>
+        <div class="scenario sc-agg">
+          <div class="sc-name">Aggressive</div>
+          <div class="sc-offer" id="sc-agg">—</div>
+          <div class="sc-pct" id="sc-agg-pct">55% of retail</div>
+          <div class="sc-note">Thin margin. Only if you have a buyer lined up or plan to build. Do not go here unless motivated.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PHASE 7 — VERDICT ── -->
+    <div class="sec">
+      <div class="sec-hd">
+        <span class="ph">Phase 7</span>&nbsp;·&nbsp;Verdict
+      </div>
+      <div id="verdict">
+        <div class="vd-hd">
+          <span class="vd-icon" id="vd-icon"></span>
+          <span class="vd-title" id="vd-title"></span>
+        </div>
+        <div class="vd-body" id="vd-body"></div>
+      </div>
+    </div>
+
+    <div id="rpt-footer"></div>
+
+  </div><!-- /report -->
+</div><!-- /page -->
+
+<script>
+const params     = new URLSearchParams(location.search);
+const AGENT_SLUG = params.get('agent') || 'richard';
+const $ = id => document.getElementById(id);
+
+function fm(v, d=0){
+  const n = parseFloat(String(v||'').replace(/[$,]/g,''));
+  if(!n||isNaN(n)) return '—';
+  if(n>=1000000) return '$'+(n/1000000).toFixed(2)+'M';
+  if(n>=1000)    return '$'+n.toLocaleString('en-US',{maximumFractionDigits:d});
+  return '$'+n.toFixed(d);
+}
+function fac(v){
+  const n=parseFloat(v);
+  if(!n||isNaN(n)) return '—';
+  return n.toFixed(4)+' ac';
+}
+function facShort(v){
+  const n=parseFloat(v);
+  if(!n||isNaN(n)) return '—';
+  return n%1===0?n+' ac':n.toFixed(3)+' ac';
+}
+function pct(a,b){ return b ? Math.round((a/b)*100) : null; }
+function med(arr){
+  const s=[...arr].sort((a,b)=>a-b);
+  return s.length%2===0 ? Math.round((s[s.length/2-1]+s[s.length/2])/2) : s[Math.floor(s.length/2)];
+}
+function avg(arr){ return arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0; }
+
+/* ── STATE ── */
+let _contact=null, _store={}, _comps=[], _extra=[];
+
+/* ── BANNER ── */
+function renderBanner(d){
+  $('waiting').classList.add('hidden');
+  $('report').style.display='block';
+
+  const addr = d.property_address || d.owner_name || '—';
+  $('tbar-addr').textContent = addr;
+  $('rb-addr').textContent   = addr;
+  $('rb-parcel').textContent = [
+    d.parcel_id ? 'Parcel '+d.parcel_id : null,
+    d.zip_code  || null,
+    d.acreage   ? d.acreage+' acres' : null,
+    d.land_use  || null,
+  ].filter(Boolean).join('  ·  ');
+
+  const pri=(d.priority||'').toUpperCase();
+  const pp=$('rb-priority');
+  pp.textContent = pri||'UNRANKED';
+  pp.className = 'priority-pill '+(pri.includes('1')?'t1':pri.includes('2')?'t2':'t3');
+
+  if(d.lead_score) $('rb-score').textContent = 'Lead Score: '+d.lead_score;
+
+  // Build quick links for the property
+  const enc = encodeURIComponent(addr+' Columbus OH '+(d.zip_code||''));
+  $('link-zillow').href    = 'https://www.zillow.com/homes/for_sale/land_type=0/'+encodeURIComponent(addr.replace(/ /g,'-'))+'-Columbus-OH-'+d.zip_code+'_rb/';
+  $('link-landwatch').href = 'https://www.landwatch.com/ohio-land-for-sale/'+encodeURIComponent(d.county||'');
+  $('link-regrid').href    = 'https://regrid.com/';
+  $('link-redfin').href    = 'https://www.redfin.com/OH/Columbus/'+encodeURIComponent(d.property_address||'');
+}
+
+/* ── PHASE 1 — AUDIT ── */
+function renderAudit(d, store){
+  const flood    = store.flood    || {};
+  const slope    = store.slope    || {};
+  const wetlands = store.wetlands || {};
+  const roads    = store.roads    || {};
+  const zoning   = store.zoning   || {};
+  const drive    = store.drive    || {};
+  const soil     = store.soil     || {};
+
+  const items = [
+    {
+      label: 'Acreage',
+      dot:   d.acreage ? 'green' : 'grey',
+      val:   d.acreage ? fac(d.acreage) : 'Confirm manually',
+    },
+    {
+      label: 'Road Access',
+      dot:   roads.cls || 'grey',
+      val:   roads.flag || 'Check satellite',
+    },
+    {
+      label: 'Flood Zone',
+      dot:   flood.cls || 'grey',
+      val:   flood.flag || 'Check FEMA',
+    },
+    {
+      label: 'Wetlands',
+      dot:   wetlands.cls || 'grey',
+      val:   wetlands.flag || 'Check Land Portal',
+    },
+    {
+      label: 'Slope',
+      dot:   slope.cls || 'grey',
+      val:   slope.flag || 'Check contour',
+    },
+    {
+      label: 'Utilities',
+      dot:   drive.cls || 'grey',
+      val:   drive.flag || 'Verify on GIS',
+    },
+    {
+      label: 'Zoning',
+      dot:   zoning.cls || 'grey',
+      val:   zoning.zone || zoning.flag || 'Check county GIS',
+    },
+    {
+      label: 'Soil Quality',
+      dot:   soil.cls || 'grey',
+      val:   soil.flag || 'Check USDA WSS',
+    },
+  ];
+
+  // Count negatives for risk flag (items 2–7 = road,flood,wetlands,slope,utilities,zoning)
+  const riskItems = items.slice(1, 7);
+  const negCount  = riskItems.filter(i=>i.dot==='red'||i.dot==='yellow').length;
+  const highRisk  = negCount >= 2;
+
+  let html = items.map(item=>`
+    <div class="audit-item ${item.dot==='red'?'risk-red':item.dot==='yellow'?'risk-yellow':item.dot==='green'?'risk-green':''}">
+      <div class="ai-dot ${item.dot}"></div>
+      <div>
+        <div class="ai-label">${item.label}</div>
+        <div class="ai-val">${item.val}</div>
+      </div>
+    </div>
+  `).join('');
+
+  if(highRisk) html += `<div class="risk-banner">⚠ HIGH RISK — ${negCount} negative flags. Use most conservative comp numbers throughout.</div>`;
+
+  $('audit-grid').innerHTML = html;
+
+  const tag = $('audit-tag');
+  if(highRisk)             { tag.textContent='HIGH RISK'; tag.className='tag red'; }
+  else if(negCount===1)    { tag.textContent='1 Caution'; tag.className='tag yellow'; }
+  else if(negCount===0 && items.some(i=>i.dot==='green')){ tag.textContent='Clean'; tag.className='tag green'; }
+  else                     { tag.textContent='Loading…';  tag.className='tag grey'; }
+}
+
+/* ── SELLER MOTIVATION ── */
+function renderMotivation(d){
+  const delinq    = (d.tax_delinquent||'').toUpperCase()==='YES';
+  const absentee  = (d.absentee_owner||'').toLowerCase()==='yes';
+  const longTerm  = (d.long_term||'').toLowerCase()==='true';
+  const owed      = parseFloat(String(d.total_owed||'').replace(/[$,]/g,'')) || 0;
+  const annualTax = parseFloat(String(d.annual_tax||'').replace(/[$,]/g,'')) || 0;
+  const yr        = d.delinquent_year ? parseInt(d.delinquent_year) : null;
+  const yearsDelinq = yr ? (2026 - yr) : 0;
+
+  let score = 0;
+  if(absentee)      score += 20;
+  if(delinq)        score += 35;
+  if(yearsDelinq>2) score += 15;
+  if(longTerm)      score += 20;
+  if(owed>5000)     score += 10;
+  score = Math.min(score, 100);
+
+  const scoreColor = score>=70 ? 'var(--green)' : score>=40 ? 'var(--yellow)' : 'var(--muted)';
+
+  const items = [
+    {
+      label: 'Tax Status',
+      cls:   delinq ? 'red' : 'green',
+      val:   delinq ? 'DELINQUENT' : 'Current',
+      sub:   delinq ? (d.delinquent_year?'Since '+d.delinquent_year:'')+(owed?'  ·  '+fm(owed)+' owed':'') : 'no back taxes',
+    },
+    {
+      label: 'Annual Tax Burden',
+      cls:   annualTax>0 ? (annualTax>2000?'red':'yellow') : 'muted',
+      val:   annualTax ? fm(annualTax)+'/yr' : '—',
+      sub:   annualTax && delinq && yearsDelinq>0 ? '~'+fm(annualTax*yearsDelinq)+' total carrying cost' : 'carrying cost',
+    },
+    {
+      label: 'Owner Location',
+      cls:   absentee ? 'yellow' : 'green',
+      val:   absentee ? 'Absentee' : 'Local',
+      sub:   absentee ? 'mailing ≠ property' : 'owner nearby',
+    },
+    {
+      label: 'Ownership Duration',
+      cls:   longTerm ? 'yellow' : 'muted',
+      val:   longTerm ? 'Long-Term Holder' : 'Recent Owner',
+      sub:   longTerm ? 'potential attachment / may discount' : '',
+    },
+    {
+      label: 'Lead Score',
+      cls:   d.lead_score>=70?'green':d.lead_score>=50?'yellow':'muted',
+      val:   d.lead_score ? d.lead_score+' / 100' : '—',
+      sub:   d.lead_score>=70?'high priority':d.lead_score>=50?'moderate':'check manually',
+    },
+  ];
+
+  $('motiv-grid').innerHTML = items.map(i=>`
+    <div class="motiv-item">
+      <div class="mi-label">${i.label}</div>
+      <div class="mi-val ${i.cls}">${i.val}</div>
+      <div class="mi-sub">${i.sub||''}</div>
+    </div>
+  `).join('');
+
+  $('motiv-score-num').textContent = score+'%';
+  $('motiv-bar').style.width  = score+'%';
+  $('motiv-bar').style.background = scoreColor;
+
+  const mt = $('motiv-tag');
+  if(score>=70)      { mt.textContent='High Motivation ('+score+'%)'; mt.className='tag green'; }
+  else if(score>=40) { mt.textContent='Moderate ('+score+'%)';        mt.className='tag yellow'; }
+  else               { mt.textContent='Low Motivation ('+score+'%)';  mt.className='tag grey'; }
+}
+
+/* ── PHASE 2 — SOLD COMPS ── */
+function renderSoldComps(comps, extra){
+  const tbody = $('sold-body');
+  const tfoot = $('sold-foot');
+  const all   = [...comps, ...extra.map(c=>({...c,_extra:true}))];
+
+  if(!all.length){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="8">No comps found via Franklin County ArcGIS — pull manually from Zillow → Lots/Land → Sold → Last 12 months.</td></tr>`;
+    $('sold-tag').textContent='NO COMPS'; $('sold-tag').className='tag red';
+    tfoot.innerHTML=''; return;
+  }
+
+  tbody.innerHTML = all.map((c,i)=>{
+    const isX = c._extra;
+    const lbl = isX ? 'E'+(i-comps.length+1) : 'C'+(i+1);
+    const addrHtml = c.zillow ? `<a href="${c.zillow}" target="_blank">${c.address||'—'}</a>` : (c.address||'—');
+    return `<tr${isX?' class="tr-extra"':''}>
+      <td class="t-num">${lbl}</td>
+      <td class="t-addr">${addrHtml}</td>
+      <td class="t-parcel">${c.parcel_id||'—'}</td>
+      <td>${facShort(c.acres)}</td>
+      <td style="color:var(--muted)">${c.date||'—'}</td>
+      <td class="t-money">${fm(c.price)}</td>
+      <td class="t-perac">${fm(c.per_acre)}/ac</td>
+      <td>${c.google?`<a href="${c.google}" target="_blank" class="t-maps">Maps</a>`:''}</td>
+    </tr>`;
+  }).join('');
+
+  const prices = comps.map(c=>c.per_acre||0).filter(p=>p>0);
+  if(prices.length){
+    const a = avg(prices);
+    const m = med(prices);
+    tfoot.innerHTML = `
+      <tr class="tr-avg"><td></td><td colspan="5" style="text-align:right;font-size:10px;letter-spacing:.07em;text-transform:uppercase">Average $/Acre (${prices.length} sold comps)</td><td class="t-perac">${fm(a)}/ac</td><td></td></tr>
+      <tr class="tr-med"><td></td><td colspan="5" style="text-align:right;font-size:10px;letter-spacing:.07em;text-transform:uppercase">Median $/Acre</td><td class="t-perac" style="color:var(--green)">${fm(m)}/ac</td><td></td></tr>
+    `;
+  } else { tfoot.innerHTML=''; }
+
+  $('sold-tag').textContent = comps.length+' comp'+(comps.length!==1?'s':'')+(extra.length?' + '+extra.length+' extra':'');
+  $('sold-tag').className   = comps.length>=5?'tag green':comps.length>=3?'tag yellow':'tag red';
+}
+
+/* ── PHASES 5 + 6 — VALUATION + OFFER CALC ── */
+function renderMath(comps, d){
+  const prices = comps.map(c=>c.per_acre||0).filter(p=>p>0);
+  if(!prices.length){
+    ['v-baseline','v-retail','v-quicksale','v-avg','v-acres'].forEach(id=>$(id).textContent='—');
+    ['sc-low','sc-work','sc-agg','oc-qs','oc-mao','offer-tag'].forEach(id=>$(id).textContent='—');
+    return;
+  }
+
+  const a   = avg(prices);
+  const m   = med(prices);
+  const baseline = Math.min(a, m);        // Phase 5: use lower
+  const ac  = parseFloat(d.acreage) || 0;
+  const mv  = parseFloat(String(d.market_value||'').replace(/[$,]/g,'')) || 0;
+
+  const retail    = ac ? Math.round(baseline * ac) : 0;
+  const quickSale = retail ? Math.round(retail * 0.90) : 0;  // retail – 10%
+  const realtor   = quickSale ? Math.round(quickSale * 0.10) : 0;
+  const fixed     = 10000 + 2500 + 500 + 1000;  // profit + closing + photos + buffer
+  const mao       = quickSale ? quickSale - 10000 - realtor - 2500 - 500 - 1000 : 0;
+  const maoPct    = quickSale ? pct(mao, quickSale) : null;
+
+  const scLow  = retail ? Math.round(retail * 0.35) : 0;
+  const scWork = retail ? Math.round(retail * 0.45) : 0;
+  const scAgg  = retail ? Math.round(retail * 0.55) : 0;
+
+  // Phase 5 KVs
+  $('v-baseline').textContent = fm(baseline)+'/ac';
+  $('v-baseline').className   = 'kv-val accent';
+  $('v-acres').textContent    = ac ? ac+' ac' : '—';
+  $('v-acres').className      = 'kv-val';
+  $('v-retail').textContent   = fm(retail);
+  $('v-retail').className     = 'kv-val green';
+  $('v-quicksale').textContent= fm(quickSale);
+  $('v-quicksale').className  = 'kv-val accent';
+  $('v-mkt').textContent      = fm(mv);
+  $('v-mkt').className        = 'kv-val yellow';
+  $('v-avg').textContent      = fm(a)+'/ac (avg) · '+fm(m)+'/ac (median)';
+  $('v-avg').className        = 'kv-val'; $('v-avg').style.fontSize='14px';
+  $('v-avg-sub').textContent  = prices.length+' sold comps · baseline = lower';
+
+  $('val-tag').textContent = retail ? 'Retail: '+fm(retail)+'  ·  Quick-Sale: '+fm(quickSale) : '—';
+  $('val-tag').className   = retail ? 'tag accent' : 'tag grey';
+
+  // Phase 6 calc table
+  $('oc-qs').textContent     = fm(quickSale);
+  $('oc-realtor').textContent= '− '+fm(realtor);
+  $('oc-mao').textContent    = fm(mao);
+
+  if(maoPct!==null){
+    $('oc-pct').textContent = maoPct+'%';
+    $('oc-pct').className   = maoPct>50 ? 'oc-val red' : 'oc-val orange';
+    $('oc-check-note').textContent = maoPct>50
+      ? '⚠ OVER 50% — deal may not work at this profit target'
+      : maoPct<=50 ? 'Within 50% rule ✓' : 'Must be ≤ 50%';
+  }
+
+  $('offer-tag').textContent = mao ? 'MAO: '+fm(mao) : '—';
+  $('offer-tag').className   = mao ? 'tag green' : 'tag grey';
+
+  // Redfin section cross-ref
+  $('rf-zillow-offer').textContent = fm(scWork);
+  $('rf-zillow-offer').className   = 'kv-val accent';
+
+  // Scenario cards
+  $('sc-low').textContent   = fm(scLow);
+  $('sc-work').textContent  = fm(scWork);
+  $('sc-agg').textContent   = fm(scAgg);
+  const rpct = retail>0 ? (v=>Math.round((v/retail)*100)) : ()=>'—';
+  $('sc-low-pct').textContent  = retail ? rpct(scLow)+'% of retail · spread ~'+fm(retail-scLow) : '35% of retail';
+  $('sc-work-pct').textContent = retail ? rpct(scWork)+'% of retail · spread ~'+fm(retail-scWork) : '45% of retail';
+  $('sc-agg-pct').textContent  = retail ? rpct(scAgg)+'% of retail · spread ~'+fm(retail-scAgg) : '55% of retail';
+}
+
+/* ── PHASE 7 — VERDICT ── */
+function renderVerdict(d, store, comps){
+  const score    = parseInt((store.assess||{}).score) || 0;
+  const prices   = comps.map(c=>c.per_acre||0).filter(p=>p>0);
+  const hasComps = prices.length>=3;
+  const ac       = parseFloat(d.acreage)||0;
+  const baseline = prices.length ? Math.min(avg(prices),med(prices)) : 0;
+  const retail   = (ac&&baseline) ? Math.round(baseline*ac) : 0;
+  const mao      = retail ? Math.round(retail*0.90 - 10000 - retail*0.09 - 4000) : 0;
+  const scWork   = retail ? Math.round(retail*0.45) : 0;
+
+  const redFlags = ['flood','slope','wetlands'].filter(k=>(store[k]||{}).cls==='red').length;
+  const delinq   = (d.tax_delinquent||'').toUpperCase()==='YES';
+  const absentee = (d.absentee_owner||'').toLowerCase()==='yes';
+  const owed     = parseFloat(String(d.total_owed||'').replace(/[$,]/g,''))||0;
+
+  let verdict, icon, title, html;
+
+  if(!hasComps){
+    verdict='negotiate'; icon='⚠️'; title='MANUAL RESEARCH REQUIRED — Insufficient Comps';
+    html=`<p>Only ${prices.length} comp${prices.length!==1?'s':''} found automatically. Pull at least 5 sold comps manually on <strong>Zillow → Lots/Land → Sold → Last 12 months</strong> before running the offer math.</p>`;
+  } else if(score>=70 && redFlags===0 && retail>0){
+    verdict='buy'; icon='✅'; title='BUY — Strong Lead';
+    const motivators=[];
+    if(delinq) motivators.push('Tax delinquent'+(d.delinquent_year?' since '+d.delinquent_year:'')+(owed?' ('+fm(owed)+' owed)':''));
+    if(absentee) motivators.push('Absentee owner — not emotionally tied to the property');
+    if(score>=80) motivators.push('ASSESS score '+score+'/100 — top-tier lead');
+    html=`<p>This parcel scores well on all criteria. ${prices.length} solid comps support a conservative retail of <strong>${fm(retail)}</strong>. `;
+    html+=`Working offer of <strong>${fm(scWork)}</strong> leaves a clean spread.</p>`;
+    if(motivators.length) html+=`<ul class="vd-pts">${motivators.map(m=>`<li>${m}</li>`).join('')}</ul>`;
+    html+=`<p>Lead with <strong>${fm(scWork)}</strong>. If seller resists, walk up to MAO of <strong>${fm(mao)}</strong>. Do not go above that — margin disappears.</p>`;
+  } else if(score<40 || redFlags>=2){
+    verdict='pass'; icon='❌'; title='PASS — Weak Lead';
+    html=`<p>ASSESS score of <strong>${score||'N/A'}/100</strong>${redFlags>=2?' plus '+redFlags+' environmental red flags':''} make this deal difficult to pencil. `;
+    if(redFlags>=2) html+=`Environmental issues (flood/slope/wetlands) reduce usable acreage and will be priced in by every buyer. `;
+    html+=`Margins are likely too thin for the risk.</p>`;
+  } else {
+    verdict='negotiate'; icon='⚠️'; title='NEGOTIATE — Dig Deeper';
+    const gaps=[];
+    if(redFlags>0)   gaps.push(redFlags+' environmental flag'+(redFlags>1?'s':'')+' — confirm severity before pricing');
+    if(!delinq&&!absentee) gaps.push('No obvious motivation flags — may need creative framing');
+    if(prices.length<5) gaps.push('Only '+prices.length+' comps — pull more from Zillow to tighten the range');
+    html=`<p>Potential here but the picture isn't clean enough to move confidently. Retail of <strong>${fm(retail)}</strong> supports a working offer of <strong>${fm(scWork)}</strong>.</p>`;
+    if(gaps.length) html+=`<ul class="vd-pts">${gaps.map(g=>`<li>${g}</li>`).join('')}</ul>`;
+    html+=`<p>Cross-check active listings on Zillow before finalizing. If seller has carrying costs (taxes, financing) and you can document what nearby lots just sold for, that's your leverage.</p>`;
+  }
+
+  const vbox = $('verdict');
+  vbox.className = verdict;
+  vbox.style.display='block';
+  $('vd-icon').textContent = icon;
+  $('vd-title').className  = 'vd-title '+verdict;
+  $('vd-title').textContent= title;
+  $('vd-body').innerHTML   = html;
+}
+
+/* ── APPLY ENRICHMENT ── */
+function applyKey(key, data){
+  _store[key]=data;
+  const d = _contact||{};
+  const auditKeys = new Set(['flood','slope','wetlands','roads','zoning','drive','soil']);
+  if(auditKeys.has(key))      renderAudit(d, _store);
+  if(key==='comps'&&data.comps){ _comps=data.comps; renderSoldComps(_comps,_extra); renderMath(_comps,d); }
+  if(key==='comps_extra')      { _extra=data;        renderSoldComps(_comps,_extra); }
+}
+
+function applyDone(storeData){
+  Object.assign(_store, storeData);
+  const d = _contact||{};
+  if(storeData.comps?.comps)  _comps=storeData.comps.comps;
+  if(storeData.comps?.extra)  _extra=storeData.comps.extra;
+  renderAudit(d, _store);
+  renderSoldComps(_comps, _extra);
+  renderMath(_comps, d);
+  renderVerdict(d, _store, _comps);
+  $('rpt-footer').textContent='Report generated '+new Date().toLocaleTimeString()+' · '+new Date().toLocaleDateString();
+}
+
+/* ── SSE ── */
+let _es=null, _rd=2000;
+function connect(){
+  if(_es){try{_es.close();}catch(e){}}
+  _es=new EventSource('/stream?agent='+AGENT_SLUG);
+  _es.onopen=()=>{ _rd=2000; $('dot').className='dot on'; $('tbar-st').textContent=AGENT_SLUG+' — waiting'; };
+  _es.onerror=()=>{
+    $('dot').className='dot'; $('tbar-st').textContent='Reconnecting…';
+    try{_es.close();}catch(e){}
+    setTimeout(connect,_rd); _rd=Math.min(_rd*1.5,30000);
+  };
+  _es.onmessage=e=>{
+    try{
+      const msg=JSON.parse(e.data);
+      if(msg.type==='contact_ready'){
+        _contact=msg.data; _store={}; _comps=[]; _extra=[];
+        // reset dynamic sections
+        $('verdict').style.display='none';
+        $('rpt-footer').textContent='';
+        ['v-baseline','v-retail','v-quicksale','v-mkt','v-avg','v-acres'].forEach(id=>{
+          $(id).innerHTML='<span class="spin"></span>'; $(id).className='kv-val';
+        });
+        $('sold-body').innerHTML='<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--muted)"><span class="spin"></span> Pulling comps…</td></tr>';
+        $('sold-foot').innerHTML='';
+        $('audit-grid').innerHTML='<div class="audit-item"><div class="ai-dot grey"></div><div><div class="ai-label">Loading</div><div class="ai-val"><span class="spin"></span></div></div></div>';
+        renderBanner(_contact);
+        renderMotivation(_contact);
+        renderAudit(_contact, {});
+      }
+      else if(msg.type==='enrich_update'){ applyKey(msg.key, msg.data); }
+      else if(msg.type==='enrich_done'){
+        const skip=new Set(['geocode']);
+        Object.entries(msg.data).forEach(([k,v])=>{ if(!skip.has(k)&&v) _store[k]=v; });
+        applyDone(msg.data);
+      }
+    }catch(err){ console.error('SSE parse error',err); }
+  };
+}
+connect();
+</script>
+</body>
+</html>
