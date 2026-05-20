@@ -6,8 +6,8 @@ All data sources are free / no API key required.
 import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-VERSION = "3.0"
-COMP_PROMPT_VERSION = "3.0"
+VERSION = "3.1"
+COMP_PROMPT_VERSION = "3.1"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
 _UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
