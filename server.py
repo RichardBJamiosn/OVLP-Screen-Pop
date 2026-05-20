@@ -6,7 +6,7 @@ All data sources are free / no API key required.
 import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-VERSION = "3.0"
+VERSION = "3.1"
 COMP_PROMPT_VERSION = "3.0"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
@@ -20,24 +20,34 @@ def _auto_update():
 
     # Try LAN first (fast, always current), then GitHub (works from home)
     sources = [
-        (_UPDATE_LAN + "/update/version",    _UPDATE_LAN + "/update"),
-        (None,                               _UPDATE_GITHUB),   # GitHub: no version endpoint, always pull
+        ("lan",    _UPDATE_LAN + "/update/version", _UPDATE_LAN + "/update"),
+        ("github", _UPDATE_GITHUB + "/server.py",   _UPDATE_GITHUB),
     ]
 
-    for version_url, base_url in sources:
+    for label, check_url, base_url in sources:
         try:
-            if version_url:
-                resp = urllib.request.urlopen(version_url, timeout=3)
+            if label == "lan":
+                resp = urllib.request.urlopen(check_url, timeout=3)
                 remote = json.loads(resp.read()).get("version", "")
                 if not remote or remote == VERSION:
                     return   # LAN reachable, already up to date
                 print(f"[update] v{remote} available via LAN (current {VERSION}) — updating...")
             else:
-                print(f"[update] Pulling latest from GitHub...")
+                # GitHub: parse VERSION from raw server.py header
+                resp = urllib.request.urlopen(check_url, timeout=10, context=_ssl())
+                first_chunk = resp.read(500).decode("utf-8", errors="replace")
+                import re as _re
+                m = _re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', first_chunk)
+                remote = m.group(1) if m else ""
+                if not remote or remote == VERSION:
+                    print(f"[update] GitHub v{remote} matches local v{VERSION} — skipping")
+                    return
+                print(f"[update] v{remote} available via GitHub (current {VERSION}) — updating...")
 
             for fname in ("server.py", "dashboard.html", "comp_prompt.md", "comp_report.html"):
                 url = f"{base_url}/{fname}"
-                data = urllib.request.urlopen(url, timeout=20).read()
+                ctx = _ssl() if "github" in base_url else None
+                data = urllib.request.urlopen(url, timeout=20, context=ctx).read() if ctx else urllib.request.urlopen(url, timeout=20).read()
                 dest = os.path.join(this_dir, fname)
                 with open(dest + ".new", "wb") as f:
                     f.write(data)
@@ -45,7 +55,8 @@ def _auto_update():
                 print(f"[update] ✓ {fname}")
             print("[update] Restarting with updated files...")
             os.execv(sys.executable, [sys.executable] + sys.argv)
-        except Exception:
+        except Exception as e:
+            print(f"[update] {label} failed: {e}")
             continue  # Try next source
 
 # ─────────────────────────────────────────────
@@ -316,6 +327,8 @@ def fetch_ghl_contact(contact_id):
             "Absentee Owner":   absentee_str,
             "Long Term Ownership": long_term_str,
             # Bridge GHL custom field keys → raw column names build_contact expects
+            "Last Sale Date":   str(cf.get("last_sale_date", "")),
+            "Last Sale Price":  str(cf.get("last_sale_price", "")),
             "Total Owed":       str(cf.get("total_owed", "")),
             "Annual Tax":       str(cf.get("annual_tax", "")),
             "Delinquent Year":  str(cf.get("delinquent_year", "")),
@@ -483,9 +496,7 @@ def parcel_centroid(parcel_id):
 
 _OVERPASS_SERVERS = [
     "http://overpass-api.de/api/interpreter",       # HTTP — works on Big Sur LibreSSL
-    "http://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 
 def _overpass_bulk(lat, lon):
@@ -1264,8 +1275,9 @@ def get_comps(lat, lon, acreage, contact_comps=None):
 
 
 # ─────────────────────────────────────────────
-# CENSUS ACS — ZIP vacancy rate + median income (free, no key for ~500/day)
+# CENSUS ACS — ZIP vacancy rate + median income (free key required)
 # ─────────────────────────────────────────────
+_CENSUS_KEY = os.environ.get("CENSUS_API_KEY", "")
 
 def get_census(zip_code):
     try:
@@ -1274,11 +1286,12 @@ def get_census(zip_code):
             return {"flag": "NO DATA", "cls": "grey", "label": "Invalid ZIP code"}
         # B25002: Housing occupancy | B19013: Median household income
         fields = "B25002_001E,B25002_002E,B25002_003E,B19013_001E"
+        key_param = f"&key={_CENSUS_KEY}" if _CENSUS_KEY else ""
         # Try 2022 ACS first, fall back to 2021
         for year in ("2022", "2021"):
             try:
                 url = (f"https://api.census.gov/data/{year}/acs/acs5"
-                       f"?get={fields}&for=zip%20code%20tabulation%20area:{zip_clean}")
+                       f"?get={fields}&for=zip%20code%20tabulation%20area:{zip_clean}{key_param}")
                 data = http_get(url, timeout=10)
                 if data and len(data) > 1:
                     row = data[1]
@@ -1508,6 +1521,8 @@ def build_contact(raw):
         "cma_high":         cf.get("cma_high") or raw.get("CMA High",""),
         "lead_score":       cf.get("lead_score") or raw.get("Lead Score",""),
         "priority":         cf.get("priority")   or raw.get("Priority",""),
+        "last_sale_date":   cf.get("last_sale_date") or raw.get("Last Sale Date",""),
+        "last_sale_price":  cf.get("last_sale_price") or raw.get("Last Sale Price",""),
         "tax_delinquent":   cf.get("tax_delinquent") or raw.get("Tax Delinquent",""),
         "delinquent_year":  raw.get("Delinquent Year",""),
         "total_owed":       raw.get("Total Owed",""),
@@ -1828,6 +1843,8 @@ def test_webhook():
         "CMA Low":"27923", "CMA High":"252185",
         "Lead Score":"97",
         "Priority":"TIER 1 - URGENT",
+        "Last Sale Date":"2019-06-14",
+        "Last Sale Price":"45000",
         "Tax Delinquent":"YES",
         "Delinquent Year":"2024",
         "Total Owed":"1850.64",
@@ -2205,14 +2222,26 @@ def update_version():
 @app.route("/update/install")
 def update_install():
     """Returns a shell one-liner staff can pipe to bash — bypasses macOS Gatekeeper entirely.
+    Works from LAN or remote (tries LAN first, GitHub fallback).
     Usage (paste in Terminal): curl -s http://192.168.0.103:5050/update/install | bash
     """
     script = """#!/bin/bash
 set -e
 INSTALL_DIR="$HOME/ovlp-pop"
-BASE="http://192.168.0.103:5050/update"
-VER=$(curl -s $BASE/version | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"])')
-echo "Downloading v${VER}..."
+mkdir -p "$INSTALL_DIR"
+LAN="http://192.168.0.103:5050/update"
+GH="https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
+
+# Try LAN first, fall back to GitHub
+if curl -s --connect-timeout 3 "$LAN/version" >/dev/null 2>&1; then
+  BASE="$LAN"
+  VER=$(curl -s $BASE/version | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"])')
+  echo "Downloading v${VER} from LAN..."
+else
+  BASE="$GH"
+  echo "LAN unreachable — downloading from GitHub..."
+fi
+
 curl -s "$BASE/server.py"      -o "$INSTALL_DIR/server.py"
 curl -s "$BASE/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
 curl -s "$BASE/comp_prompt.md" -o "$INSTALL_DIR/comp_prompt.md"

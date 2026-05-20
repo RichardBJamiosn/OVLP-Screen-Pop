@@ -694,10 +694,10 @@ table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
     <!-- FINANCIALS -->
     <div id="fin-row">
       <div class="fc"><div class="fc-lbl">Market Value</div><div class="fc-val" id="f-mkt">—</div></div>
-      <div class="fc"><div class="fc-lbl">CMA Value</div><div class="fc-val" id="f-cma">—</div></div>
-      <div class="fc"><div class="fc-lbl">CMA Range</div><div class="fc-val" style="font-size:13px" id="f-range">—</div></div>
-      <div class="fc"><div class="fc-lbl">Tax Delinquent</div><div class="fc-val red" id="f-tax">—</div><div class="fc-sub" id="f-taxyr"></div></div>
-      <div class="fc"><div class="fc-lbl">Total Owed</div><div class="fc-val yellow" id="f-owed">—</div><div class="fc-sub" id="f-annual"></div></div>
+      <div class="fc"><div class="fc-lbl">Date Last Sold</div><div class="fc-val" id="f-cma">—</div></div>
+      <div class="fc"><div class="fc-lbl">Last Sold Amount</div><div class="fc-val" style="font-size:13px" id="f-range">—</div></div>
+      <div class="fc"><div class="fc-lbl">Yearly Property Taxes</div><div class="fc-val" id="f-tax">—</div></div>
+      <div class="fc"><div class="fc-lbl">Tax Delinquency</div><div class="fc-val red" id="f-owed">—</div><div class="fc-sub" id="f-taxyr"></div></div>
     </div>
 
     <!-- CONTEXT -->
@@ -1081,12 +1081,11 @@ function renderContact(d){
   $('offer-range').innerHTML='<span class="spin"></span>';
 
   $('f-mkt').textContent=fmt(d.market_value);
-  $('f-cma').textContent=fmt(d.cma_value);
-  $('f-range').textContent=(d.cma_low&&d.cma_high)?fmt(d.cma_low)+' – '+fmt(d.cma_high):'—';
-  $('f-tax').textContent=d.tax_delinquent||'—';
-  $('f-taxyr').textContent=d.delinquent_year?'Since '+d.delinquent_year:'';
+  $('f-cma').textContent=d.last_sale_date||'—';
+  $('f-range').textContent=d.last_sale_price?fmt(d.last_sale_price):'—';
+  $('f-tax').textContent=d.annual_tax?fmt(d.annual_tax)+'/yr':'—';
   $('f-owed').textContent=fmt(d.total_owed);
-  $('f-annual').textContent=d.annual_tax?fmt(d.annual_tax)+'/yr':'';
+  $('f-taxyr').textContent=d.delinquent_year?'Since '+d.delinquent_year:'';
 
   $('r-addr').textContent=d.property_address||'—';
   $('r-acres').textContent=d.acreage?d.acreage+' acres':'—';
