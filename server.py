@@ -490,6 +490,63 @@ def parcel_centroid(parcel_id):
         print(f"[parcel_centroid] {e}")
         return None, None
 
+
+def get_parcel_record(parcel_id, lat=None, lon=None):
+    """Subject-parcel sale + value from Franklin County Auditor GIS.
+    Fills the POP financial boxes (last sold date/amount, market value) when the
+    GHL contact carries no sale data of its own. Tax bill / delinquent balance are
+    NOT published in this layer, so those boxes still rely on GHL list data."""
+    base = ("https://gis.franklincountyohio.gov/hosting/rest/services/ParcelFeatures"
+            "/Parcel_Features/MapServer/0/query")
+    fields = "PARCELID,SALEDATE,SALEPRICE,TOTVALUEBASE"
+    url = None
+    if parcel_id:
+        pid = parcel_id.strip()
+        url = (f"{base}?where=PARCELID%3D%27{urllib.parse.quote(pid)}%27"
+               f"&outFields={fields}&returnGeometry=false&f=json")
+    elif lat and lon:
+        pt = json.dumps({"x": lon, "y": lat, "spatialReference": {"wkid": 4326}})
+        url = (f"{base}?geometry={urllib.parse.quote(pt)}"
+               f"&geometryType=esriGeometryPoint&inSR=4326"
+               f"&spatialRel=esriSpatialRelIntersects&outFields={fields}"
+               f"&returnGeometry=false&f=json")
+    if not url:
+        return {}
+    try:
+        data = http_get(url, timeout=10)
+        feats = data.get("features", [])
+        if not feats:
+            return {}
+        a = feats[0].get("attributes", {})
+        out = {"source": "Franklin County Auditor"}
+        sale_ts = a.get("SALEDATE")
+        if sale_ts:
+            try:
+                import datetime
+                out["last_sale_date"] = datetime.datetime.utcfromtimestamp(
+                    sale_ts / 1000).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+        price = a.get("SALEPRICE") or 0
+        try:
+            if float(price) > 0:
+                out["last_sale_amount"] = int(float(price))
+        except Exception:
+            pass
+        mv = a.get("TOTVALUEBASE") or 0   # TOTVALUEBASE is full appraised (market) value
+        try:
+            if float(mv) > 0:
+                out["market_value"] = int(float(mv))
+        except Exception:
+            pass
+        print(f"[parcel_record] {parcel_id or (lat, lon)} → "
+              f"sale={out.get('last_sale_amount')} date={out.get('last_sale_date')} "
+              f"mkt={out.get('market_value')}")
+        return out
+    except Exception as e:
+        print(f"[parcel_record] {e}")
+        return {}
+
 # ─────────────────────────────────────────────
 # 1. ACCESS — Road type + landlocked (OSM Overpass)
 # ─────────────────────────────────────────────
@@ -1735,6 +1792,14 @@ def _enrich_and_push(contact):
     # Overpass — roads/power/dams only (less critical, can fail gracefully)
     ovp_thread = threading.Thread(target=run_overpass, daemon=True)
 
+    # Subject-parcel sale/value lookup — fills financial boxes from county GIS
+    # when GHL has no sale data. Runs in parallel; merged into enrich_done store.
+    def run_parcel():
+        rec = get_parcel_record(parcel_id, lat, lon)
+        if rec:
+            store["parcel"] = rec
+    parcel_thread = threading.Thread(target=run_parcel, daemon=True)
+
     def _launch_wave(wave):
         ts = [threading.Thread(target=run_and_push, args=t, daemon=True) for t in wave]
         for t in ts: t.start()
@@ -1748,6 +1813,7 @@ def _enrich_and_push(contact):
     time.sleep(0.15)
     w3 = _launch_wave(wave3)
     ovp_thread.start()
+    parcel_thread.start()
 
     # Wait for all waves — hard caps, APIs should finish well inside these
     for t in w1: t.join(timeout=12)
@@ -1796,6 +1862,7 @@ def _enrich_and_push(contact):
     # ── 5b. Wait for Overpass then push final score update ───────────────────
     # Overpass now runs all 4 servers in parallel — worst case ~10s
     ovp_thread.join(timeout=12)
+    parcel_thread.join(timeout=10)
 
     assess     = calc_assess_score(store, contact)
     escalations= build_escalations(store, contact)

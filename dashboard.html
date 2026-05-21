@@ -1228,6 +1228,16 @@ function applyUpdate(key,data){
 
 function applyDone(data,cached){
   if(data.geocode&&_curContact) _updateLinks(_curContact,data.geocode);
+  // County parcel sale/value — fill financial boxes GHL left empty
+  if(data.parcel){
+    const p=data.parcel, empty=v=>!v||v==='—'||v==='$0';
+    if(p.last_sale_date && empty($('f-cma').textContent))
+      $('f-cma').textContent=p.last_sale_date;
+    if(p.last_sale_amount && empty($('f-range').textContent))
+      $('f-range').textContent=fmt(p.last_sale_amount);
+    if(p.market_value && empty($('f-mkt').textContent))
+      $('f-mkt').textContent=fmt(p.market_value);
+  }
   if(data.assess){
     const a=data.assess;
     $('score-num').textContent=a.score;
