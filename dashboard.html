@@ -1252,8 +1252,8 @@ function applyDone(data,cached){
   if(data.offer){
     $('offer-range').textContent=data.offer.range_fmt;
     $('mao-lbl').textContent='MAO: '+data.offer.mao_fmt;
-  } else if(_curContact&&_curContact.cma_value){
-    $('offer-range').textContent='No CMA data';
+  } else {
+    $('offer-range').textContent=(_curContact&&_curContact.cma_value)?'No CMA data':'No comps found';
     $('mao-lbl').textContent='';
   }
   if(data.escalations&&data.escalations.length){
