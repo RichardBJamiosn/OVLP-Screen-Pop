@@ -870,7 +870,7 @@ table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
 
 <script>
 const $=id=>document.getElementById(id);
-const fmt=n=>{try{return'$'+Number(String(n).replace(/[,$]/g,'')).toLocaleString();}catch{return'—'}};
+const fmt=n=>{if(n===undefined||n===null||n==='')return'—';const v=Number(String(n).replace(/[,$]/g,''));return isNaN(v)?'—':'$'+v.toLocaleString();};
 const fmtA=n=>n?Number(n).toFixed(3)+' ac':'—';
 
 setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
