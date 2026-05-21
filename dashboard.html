@@ -934,7 +934,7 @@ function _hideOffline() {
   setTimeout(() => { el.style.display='none'; }, 400);
 }
 
-let _es=null, _reconnectDelay=2000;
+let _es=null, _reconnectDelay=2000, _build=null;
 function connect(){
   if(_es){try{_es.close();}catch(e){}}
   _es=new EventSource('/stream?agent='+AGENT_SLUG);
@@ -944,6 +944,12 @@ function connect(){
     _hideOffline();
     $('dot').className='dot on';
     $('status-text').textContent=(AGENT_PARAM?AGENT_PARAM+' — ':'')+'waiting for call';
+    // Auto-reload if the server is serving a newer dashboard build than
+    // the JS we loaded — ends the "hard-refresh after every deploy" problem.
+    fetch('/ping',{cache:'no-store'}).then(r=>r.json()).then(j=>{
+      if(_build===null) _build=j.build;
+      else if(j.build && j.build!==_build) location.reload(true);
+    }).catch(()=>{});
   };
   _es.onerror=()=>{
     $('dot').className='dot';
@@ -1166,8 +1172,20 @@ function _compRow(i,c){
   </tr>`;
 }
 
+function _fillParcel(p){
+  if(!p) return;
+  const empty=v=>!v||v==='—'||v==='$0';
+  if(p.last_sale_date && empty($('f-cma').textContent))
+    $('f-cma').textContent=p.last_sale_date;
+  if(p.last_sale_amount && empty($('f-range').textContent))
+    $('f-range').textContent=fmt(p.last_sale_amount);
+  if(p.market_value && empty($('f-mkt').textContent))
+    $('f-mkt').textContent=fmt(p.market_value);
+}
+
 function applyUpdate(key,data){
   if(!data) return;  // guard against null payloads
+  if(key==='parcel'){ _fillParcel(data); return; }  // not a gauge-counted card
   _loadCount++;
   _gaugeUpdate(_loadCount);
   const cardId=_KEY_TO_CARD[key];
@@ -1229,15 +1247,7 @@ function applyUpdate(key,data){
 function applyDone(data,cached){
   if(data.geocode&&_curContact) _updateLinks(_curContact,data.geocode);
   // County parcel sale/value — fill financial boxes GHL left empty
-  if(data.parcel){
-    const p=data.parcel, empty=v=>!v||v==='—'||v==='$0';
-    if(p.last_sale_date && empty($('f-cma').textContent))
-      $('f-cma').textContent=p.last_sale_date;
-    if(p.last_sale_amount && empty($('f-range').textContent))
-      $('f-range').textContent=fmt(p.last_sale_amount);
-    if(p.market_value && empty($('f-mkt').textContent))
-      $('f-mkt').textContent=fmt(p.market_value);
-  }
+  if(data.parcel) _fillParcel(data.parcel);
   if(data.assess){
     const a=data.assess;
     $('score-num').textContent=a.score;

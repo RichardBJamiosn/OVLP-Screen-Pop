@@ -1798,6 +1798,9 @@ def _enrich_and_push(contact):
         rec = get_parcel_record(parcel_id, lat, lon)
         if rec:
             store["parcel"] = rec
+            # Push immediately so financial boxes fill in ~1s, not gated
+            # behind the slow Overpass join at enrich_done.
+            push({"type": "enrich_update", "key": "parcel", "data": rec})
     parcel_thread = threading.Thread(target=run_parcel, daemon=True)
 
     def _launch_wave(wave):
@@ -2220,8 +2223,12 @@ def lookup_api():
         return jsonify({"match": True, **match})
     return jsonify({"match": False, "searched": _normalize_phone(phone)})
 
+def _dash_build():
+    try: return int(os.path.getmtime(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")))
+    except Exception: return 0
+
 @app.route("/ping")
-def ping(): return jsonify({"status":"running","apis":13,"time":time.time()})
+def ping(): return jsonify({"status":"running","apis":13,"time":time.time(),"build":_dash_build()})
 
 @app.route("/debug/last-contact")
 def debug_last_contact():
