@@ -2419,9 +2419,15 @@ def comp_prompt_page():
 if __name__ == "__main__":
     # Skip auto-update on the canonical server (192.168.0.103) — this IS the source.
     # Employee machines auto-update from here or GitHub on every boot.
-    import socket
-    local_ip = socket.gethostbyname(socket.gethostname())
-    if "192.168.0.103" not in local_ip:
+    import socket as _sock
+    try:
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = ""
+    if local_ip != "192.168.0.103":
         _auto_update()
     else:
         print("[update] canonical server — skipping self-update")
