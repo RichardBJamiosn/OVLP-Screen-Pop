@@ -76,35 +76,49 @@ fi
 echo "  ✓ Flask, certifi, requests installed"
 echo ""
 
-# ── Pick agent ────────────────────────────────────────────
-echo "  [4/6] Who are you? Pick your name:"
-echo ""
-echo "    1)  Richard"
-echo "    2)  OJ"
-echo "    3)  Kehlen"
-echo "    4)  Lucia"
-echo ""
-read -p "  Enter 1-4: " CHOICE
-
-case $CHOICE in
-    1) AGENT_NAME="Richard"; AGENT_SLUG="richard" ;;
-    2) AGENT_NAME="OJ";      AGENT_SLUG="oj"      ;;
-    3) AGENT_NAME="Kehlen";  AGENT_SLUG="kehlen"  ;;
-    4) AGENT_NAME="Lucia";   AGENT_SLUG="lucia"   ;;
-    *)
-        echo "  Invalid choice. Run the command again."
-        exit 1 ;;
-esac
+# ── Pick agent (env var OVLP_AGENT overrides prompt) ──────
+if [ -n "$OVLP_AGENT" ]; then
+    case $OVLP_AGENT in
+        richard) AGENT_NAME="Richard"; AGENT_SLUG="richard" ;;
+        oj)      AGENT_NAME="OJ";      AGENT_SLUG="oj"      ;;
+        kehlen)  AGENT_NAME="Kehlen";  AGENT_SLUG="kehlen"  ;;
+        lucia)   AGENT_NAME="Lucia";   AGENT_SLUG="lucia"   ;;
+        *)       echo "  ✗ Unknown agent: $OVLP_AGENT"; exit 1 ;;
+    esac
+    echo "  [4/6] Agent: $AGENT_NAME"
+else
+    echo "  [4/6] Who are you? Pick your name:"
+    echo ""
+    echo "    1)  Richard"
+    echo "    2)  OJ"
+    echo "    3)  Kehlen"
+    echo "    4)  Lucia"
+    echo ""
+    read -p "  Enter 1-4: " CHOICE
+    case $CHOICE in
+        1) AGENT_NAME="Richard"; AGENT_SLUG="richard" ;;
+        2) AGENT_NAME="OJ";      AGENT_SLUG="oj"      ;;
+        3) AGENT_NAME="Kehlen";  AGENT_SLUG="kehlen"  ;;
+        4) AGENT_NAME="Lucia";   AGENT_SLUG="lucia"   ;;
+        *)
+            echo "  Invalid choice. Run the command again."
+            exit 1 ;;
+    esac
+fi
 echo "  ✓ Agent: $AGENT_NAME"
 
-# ── GHL API Key ───────────────────────────────────────────
-echo ""
-echo "  Enter the GHL API key (get from Richard):"
-read -p "  Key: " GHL_KEY
-
-if [ -z "$GHL_KEY" ]; then
-    echo "  ✗ Key cannot be blank."
-    exit 1
+# ── GHL API Key (env var OVLP_KEY overrides prompt) ───────
+if [ -n "$OVLP_KEY" ]; then
+    GHL_KEY="$OVLP_KEY"
+    echo "  [4b/6] API key: pre-configured ✓"
+else
+    echo ""
+    echo "  Enter the GHL API key (get from Richard):"
+    read -p "  Key: " GHL_KEY
+    if [ -z "$GHL_KEY" ]; then
+        echo "  ✗ Key cannot be blank."
+        exit 1
+    fi
 fi
 echo "  ✓ Key saved"
 
