@@ -6,8 +6,8 @@ All data sources are free / no API key required.
 import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-VERSION = "3.1"
-COMP_PROMPT_VERSION = "3.1"
+VERSION = "LEGACY"
+COMP_PROMPT_VERSION = "LEGACY"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
 _UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
@@ -329,9 +329,7 @@ def fetch_ghl_contact(contact_id):
             # Bridge GHL custom field keys → raw column names build_contact expects
             "Last Sale Date":   str(cf.get("last_sale_date", "")),
             "Last Sale Price":  str(cf.get("last_sale_price", "")),
-            "Total Owed":       str(cf.get("total_owed", "")),
             "Annual Tax":       str(cf.get("annual_tax", "")),
-            "Delinquent Year":  str(cf.get("delinquent_year", "")),
             "Land Use Desc":    str(cf.get("land_use", "")),
             "customField":      cf,
         }
@@ -1580,9 +1578,6 @@ def build_contact(raw):
         "priority":         cf.get("priority")   or raw.get("Priority",""),
         "last_sale_date":   cf.get("last_sale_date") or raw.get("Last Sale Date",""),
         "last_sale_price":  cf.get("last_sale_price") or raw.get("Last Sale Price",""),
-        "tax_delinquent":   cf.get("tax_delinquent") or raw.get("Tax Delinquent",""),
-        "delinquent_year":  raw.get("Delinquent Year",""),
-        "total_owed":       raw.get("Total Owed",""),
         "annual_tax":       raw.get("Annual Tax",""),
         "absentee_owner":   raw.get("Absentee Owner",""),
         "long_term":        raw.get("Long Term Ownership",""),
@@ -1823,6 +1818,19 @@ def _enrich_and_push(contact):
     for t in w2: t.join(timeout=12)
     for t in w3: t.join(timeout=12)
 
+    # ── Tax estimation from county assessed value ──────────────────────────
+    if not contact.get("annual_tax"):
+        zoning_data = store.get("zoning", {})
+        if isinstance(zoning_data, dict):
+            true_val = float(zoning_data.get("county_true_value", 0) or 0)
+            if true_val > 0:
+                assessed = true_val * 0.35
+                est_tax = round(assessed * 0.032, 2)
+                contact["annual_tax"] = f"~${int(est_tax):,}"
+                push({"type": "enrich_update", "key": "est_annual_tax",
+                      "data": {"annual_tax": contact["annual_tax"]}})
+                print(f"[tax_est] assessed=${assessed:,.0f} -> est annual tax=${est_tax:,.0f}")
+
     # ── 5a. Push preliminary score immediately after waves 1-3 ──────────────
     # Rep sees score ring + offer range without waiting for Overpass (OSM data)
     assess_pre     = calc_assess_score(store, contact)
@@ -1842,6 +1850,9 @@ def _enrich_and_push(contact):
             print(f"[offer] tiny lot ({ac}ac) — using avg comp price ${avg_price:,} instead of $/acre")
         elif avg_per_acre and ac:
             cma = avg_per_acre * ac
+        elif avg_price and not ac:
+            cma = avg_price
+            print(f"[offer] no acreage — using avg comp price ${avg_price:,}")
     # Guardrail: cap CMA at 3× true market value — prevents tiny-lot $/ac inflation
     if cma:
         mv = 0.0
@@ -1915,9 +1926,6 @@ def test_webhook():
         "Priority":"TIER 1 - URGENT",
         "Last Sale Date":"2019-06-14",
         "Last Sale Price":"45000",
-        "Tax Delinquent":"YES",
-        "Delinquent Year":"2024",
-        "Total Owed":"1850.64",
         "Annual Tax":"1000.88",
         "Absentee Owner":"Yes",
         "Long Term Ownership":"True",
@@ -2236,7 +2244,7 @@ def debug_last_contact():
     state = _last_state.get(slug, {})
     contact_evt = state.get("contact", {})
     data = contact_evt.get("data", {}) if isinstance(contact_evt, dict) else {}
-    keys = ["owner_name","last_sale_date","last_sale_price","annual_tax","tax_delinquent","delinquent_year","total_owed","market_value","parcel_id"]
+    keys = ["owner_name","last_sale_date","last_sale_price","annual_tax","market_value","parcel_id"]
     return jsonify({"fields": {k: data.get(k, "NOT PRESENT") for k in keys}, "all_data": data})
 
 @app.route("/debug/fetch-contact")
@@ -2249,8 +2257,8 @@ def debug_fetch_contact():
     contact = build_contact(raw)
     return jsonify({
         "raw_customField": raw.get("customField", {}),
-        "raw_bridged": {k: raw.get(k,"") for k in ["Last Sale Date","Last Sale Price","Annual Tax","Total Owed"]},
-        "build_contact_output": {k: contact.get(k,"") for k in ["last_sale_date","last_sale_price","annual_tax","total_owed","market_value","parcel_id","owner_name"]},
+        "raw_bridged": {k: raw.get(k,"") for k in ["Last Sale Date","Last Sale Price","Annual Tax"]},
+        "build_contact_output": {k: contact.get(k,"") for k in ["last_sale_date","last_sale_price","annual_tax","market_value","parcel_id","owner_name"]},
     })
 
 @app.route("/recent")
@@ -2409,7 +2417,7 @@ def comp_prompt_page():
     return page, 200, {"Content-Type": "text/html"}
 
 if __name__ == "__main__":
-    _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
+    # _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
     _pop_history.extend(_load_pop_history())
     # Build phone index in background so startup isn't blocked
     threading.Thread(target=_build_phone_index, daemon=True).start()

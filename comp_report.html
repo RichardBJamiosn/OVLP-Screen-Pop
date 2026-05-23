@@ -526,7 +526,7 @@ a:hover { text-decoration: underline; }
           <div class="sc-name">Lowball</div>
           <div class="sc-offer" id="sc-low">—</div>
           <div class="sc-pct" id="sc-low-pct">35% of retail</div>
-          <div class="sc-note">Use when seller is highly motivated — tax delinquent, distressed, absentee. Expect pushback. Plant the anchor.</div>
+          <div class="sc-note">Use when seller is highly motivated — distressed, absentee, long-term owner. Expect pushback. Plant the anchor.</div>
         </div>
         <div class="scenario sc-work">
           <div class="sc-name">Working Offer</div>
@@ -707,36 +707,25 @@ function renderAudit(d, store){
 
 /* ── SELLER MOTIVATION ── */
 function renderMotivation(d){
-  const delinq    = (d.tax_delinquent||'').toUpperCase()==='YES';
   const absentee  = (d.absentee_owner||'').toLowerCase()==='yes';
   const longTerm  = (d.long_term||'').toLowerCase()==='true';
-  const owed      = parseFloat(String(d.total_owed||'').replace(/[$,]/g,'')) || 0;
   const annualTax = parseFloat(String(d.annual_tax||'').replace(/[$,]/g,'')) || 0;
-  const yr        = d.delinquent_year ? parseInt(d.delinquent_year) : null;
-  const yearsDelinq = yr ? (2026 - yr) : 0;
 
   let score = 0;
-  if(absentee)      score += 20;
-  if(delinq)        score += 35;
-  if(yearsDelinq>2) score += 15;
-  if(longTerm)      score += 20;
-  if(owed>5000)     score += 10;
+  if(absentee)      score += 30;
+  if(longTerm)      score += 30;
+  if(annualTax>2000) score += 20;
+  if(annualTax>0)   score += 20;
   score = Math.min(score, 100);
 
   const scoreColor = score>=70 ? 'var(--green)' : score>=40 ? 'var(--yellow)' : 'var(--muted)';
 
   const items = [
     {
-      label: 'Tax Status',
-      cls:   delinq ? 'red' : 'green',
-      val:   delinq ? 'DELINQUENT' : 'Current',
-      sub:   delinq ? (d.delinquent_year?'Since '+d.delinquent_year:'')+(owed?'  ·  '+fm(owed)+' owed':'') : 'no back taxes',
-    },
-    {
       label: 'Annual Tax Burden',
       cls:   annualTax>0 ? (annualTax>2000?'red':'yellow') : 'muted',
       val:   annualTax ? fm(annualTax)+'/yr' : '—',
-      sub:   annualTax && delinq && yearsDelinq>0 ? '~'+fm(annualTax*yearsDelinq)+' total carrying cost' : 'carrying cost',
+      sub:   'carrying cost',
     },
     {
       label: 'Owner Location',
@@ -833,7 +822,8 @@ function renderMath(comps, d){
   const ac  = parseFloat(d.acreage) || 0;
   const mv  = parseFloat(String(d.market_value||'').replace(/[$,]/g,'')) || 0;
 
-  const retail    = ac ? Math.round(baseline * ac) : 0;
+  const avgPrice  = comps.map(c=>parseFloat(c.price)||0).filter(p=>p>0);
+  const retail    = ac ? Math.round(baseline * ac) : (avgPrice.length ? Math.round(avg(avgPrice)) : 0);
   const quickSale = retail ? Math.round(retail * 0.90) : 0;  // retail – 10%
   const realtor   = quickSale ? Math.round(quickSale * 0.10) : 0;
   const fixed     = 10000 + 2500 + 500 + 1000;  // profit + closing + photos + buffer
@@ -899,14 +889,13 @@ function renderVerdict(d, store, comps){
   const hasComps = prices.length>=3;
   const ac       = parseFloat(d.acreage)||0;
   const baseline = prices.length ? Math.min(avg(prices),med(prices)) : 0;
-  const retail   = (ac&&baseline) ? Math.round(baseline*ac) : 0;
+  const avgP     = comps.map(c=>parseFloat(c.price)||0).filter(p=>p>0);
+  const retail   = ac ? Math.round(baseline*ac) : (avgP.length ? Math.round(avg(avgP)) : 0);
   const mao      = retail ? Math.round(retail*0.90 - 10000 - retail*0.09 - 4000) : 0;
   const scWork   = retail ? Math.round(retail*0.45) : 0;
 
   const redFlags = ['flood','slope','wetlands'].filter(k=>(store[k]||{}).cls==='red').length;
-  const delinq   = (d.tax_delinquent||'').toUpperCase()==='YES';
   const absentee = (d.absentee_owner||'').toLowerCase()==='yes';
-  const owed     = parseFloat(String(d.total_owed||'').replace(/[$,]/g,''))||0;
 
   let verdict, icon, title, html;
 
@@ -916,7 +905,6 @@ function renderVerdict(d, store, comps){
   } else if(score>=70 && redFlags===0 && retail>0){
     verdict='buy'; icon='✅'; title='BUY — Strong Lead';
     const motivators=[];
-    if(delinq) motivators.push('Tax delinquent'+(d.delinquent_year?' since '+d.delinquent_year:'')+(owed?' ('+fm(owed)+' owed)':''));
     if(absentee) motivators.push('Absentee owner — not emotionally tied to the property');
     if(score>=80) motivators.push('ASSESS score '+score+'/100 — top-tier lead');
     html=`<p>This parcel scores well on all criteria. ${prices.length} solid comps support a conservative retail of <strong>${fm(retail)}</strong>. `;
@@ -932,7 +920,7 @@ function renderVerdict(d, store, comps){
     verdict='negotiate'; icon='⚠️'; title='NEGOTIATE — Dig Deeper';
     const gaps=[];
     if(redFlags>0)   gaps.push(redFlags+' environmental flag'+(redFlags>1?'s':'')+' — confirm severity before pricing');
-    if(!delinq&&!absentee) gaps.push('No obvious motivation flags — may need creative framing');
+    if(!absentee) gaps.push('No obvious motivation flags — may need creative framing');
     if(prices.length<5) gaps.push('Only '+prices.length+' comps — pull more from Zillow to tighten the range');
     html=`<p>Potential here but the picture isn't clean enough to move confidently. Retail of <strong>${fm(retail)}</strong> supports a working offer of <strong>${fm(scWork)}</strong>.</p>`;
     if(gaps.length) html+=`<ul class="vd-pts">${gaps.map(g=>`<li>${g}</li>`).join('')}</ul>`;

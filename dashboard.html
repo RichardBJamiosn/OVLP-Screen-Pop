@@ -697,7 +697,6 @@ table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
       <div class="fc"><div class="fc-lbl">Date Last Sold</div><div class="fc-val" id="f-cma">—</div></div>
       <div class="fc"><div class="fc-lbl">Last Sold Amount</div><div class="fc-val" style="font-size:13px" id="f-range">—</div></div>
       <div class="fc"><div class="fc-lbl">Yearly Property Taxes</div><div class="fc-val" id="f-tax">—</div></div>
-      <div class="fc"><div class="fc-lbl">Tax Delinquency</div><div class="fc-val red" id="f-owed">—</div><div class="fc-sub" id="f-taxyr"></div></div>
     </div>
 
     <!-- CONTEXT -->
@@ -1090,8 +1089,6 @@ function renderContact(d){
   $('f-cma').textContent=d.last_sale_date||'—';
   $('f-range').textContent=d.last_sale_price?fmt(d.last_sale_price):'—';
   $('f-tax').textContent=d.annual_tax?fmt(d.annual_tax)+'/yr':'—';
-  $('f-owed').textContent=fmt(d.total_owed);
-  $('f-taxyr').textContent=d.delinquent_year?'Since '+d.delinquent_year:'';
 
   $('r-addr').textContent=d.property_address||'—';
   $('r-acres').textContent=d.acreage?d.acreage+' acres':'—';
@@ -1102,7 +1099,6 @@ function renderContact(d){
   const flags=[];
   if((d.absentee_owner||'').toLowerCase()==='yes') flags.push({t:'Absentee Owner',c:'red'});
   if((d.long_term||'').toLowerCase()==='true')     flags.push({t:'Long-Term Owner',c:'yellow'});
-  if((d.tax_delinquent||'').toUpperCase()==='yes') flags.push({t:'Tax Delinquent',c:'red'});
   $('flags-row').innerHTML=flags.map(f=>`<span class="pill ${f.c}">${f.t}</span>`).join('');
 
   const comps=(d.comps||[]).filter(c=>c.address);
@@ -1186,6 +1182,12 @@ function _fillParcel(p){
 function applyUpdate(key,data){
   if(!data) return;  // guard against null payloads
   if(key==='parcel'){ _fillParcel(data); return; }  // not a gauge-counted card
+  if(key==='est_annual_tax'){
+    if(data.annual_tax && $('f-tax').textContent==='—'){
+      $('f-tax').textContent=data.annual_tax+'/yr';
+    }
+    return;
+  }
   _loadCount++;
   _gaugeUpdate(_loadCount);
   const cardId=_KEY_TO_CARD[key];
@@ -1263,7 +1265,7 @@ function applyDone(data,cached){
     $('offer-range').textContent=data.offer.range_fmt;
     $('mao-lbl').textContent='MAO: '+data.offer.mao_fmt;
   } else {
-    $('offer-range').textContent=(_curContact&&_curContact.cma_value)?'No CMA data':'No comps found';
+    $('offer-range').textContent='—';
     $('mao-lbl').textContent='';
   }
   if(data.escalations&&data.escalations.length){
