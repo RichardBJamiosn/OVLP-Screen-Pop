@@ -2417,7 +2417,14 @@ def comp_prompt_page():
     return page, 200, {"Content-Type": "text/html"}
 
 if __name__ == "__main__":
-    _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
+    # Skip auto-update on the canonical server (192.168.0.103) — this IS the source.
+    # Employee machines auto-update from here or GitHub on every boot.
+    import socket
+    local_ip = socket.gethostbyname(socket.gethostname())
+    if "192.168.0.103" not in local_ip:
+        _auto_update()
+    else:
+        print("[update] canonical server — skipping self-update")
     _pop_history.extend(_load_pop_history())
     # Build phone index in background so startup isn't blocked
     threading.Thread(target=_build_phone_index, daemon=True).start()
