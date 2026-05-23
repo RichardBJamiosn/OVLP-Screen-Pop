@@ -2417,7 +2417,7 @@ def comp_prompt_page():
     return page, 200, {"Content-Type": "text/html"}
 
 if __name__ == "__main__":
-    # _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
+    _auto_update()   # check Richard's machine for newer version — replaces files + restarts if needed
     _pop_history.extend(_load_pop_history())
     # Build phone index in background so startup isn't blocked
     threading.Thread(target=_build_phone_index, daemon=True).start()
