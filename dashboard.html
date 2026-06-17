@@ -592,7 +592,7 @@ table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
 <!-- TOP BAR -->
 <div id="topbar">
   <div class="logo">OVLP · ASSESS</div>
-  <div id="ver-badge">LEGACY</div>
+  <div id="ver-badge">v3.2</div>
   <div class="status-pill">
     <span class="dot" id="dot"></span>
     <span id="status-text">Connecting...</span>
@@ -781,6 +781,7 @@ table.comps tbody tr:hover td { background: rgba(124,123,255,.06); }
   <a class="lb" id="btn-owner"     href="#" target="_blank">Search Owner</a>
   <a class="lb" id="btn-zillow"    href="#" target="_blank">Zillow</a>
   <a class="lb" id="btn-landwatch" href="#" target="_blank">LandWatch</a>
+  <a class="lb" id="btn-gis"       href="https://gis.franklincountyohio.gov/parcelviewer/" target="_blank">FC GIS</a>
   <a class="lb" id="btn-ghl"       href="https://app.gohighlevel.com/" target="_blank">GHL</a>
   <a class="lb" id="btn-comp-report" href="#" onclick="event.preventDefault();_openCompReport()" style="background:rgba(124,123,255,0.15);border-color:rgba(124,123,255,.4);color:#a8a6ff;font-weight:700">COMP REPORT ↗</a>
   <span id="updated"></span>
@@ -1145,6 +1146,10 @@ function _updateLinks(d,gc){
   $('btn-owner').href=`https://www.google.com/search?q=${own}+Columbus+Ohio+land+owner`;
   $('btn-zillow').href=`https://www.zillow.com/homes/${addr}_rb/`;
   $('btn-landwatch').href=`https://www.landwatch.com/ohio-land-for-sale/franklin-county`;
+  const pid=d.parcel_id&&d.parcel_id!=='—'?d.parcel_id:null;
+  $('btn-gis').href=pid
+    ?`https://gis.franklincountyohio.gov/parcelviewer/?find=${encodeURIComponent(pid)}`
+    :'https://gis.franklincountyohio.gov/parcelviewer/';
 }
 
 const _KEY_TO_CARD={

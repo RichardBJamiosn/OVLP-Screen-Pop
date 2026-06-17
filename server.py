@@ -3,61 +3,158 @@ OVLP Screen Pop Server — ASSESS Framework (Maximum Free API Build)
 All data sources are free / no API key required.
 """
 
-import json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
+import hashlib, json, os, queue, re, threading, time, urllib.parse, urllib.request, urllib.error, math, ssl, sys
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-VERSION = "LEGACY"
-COMP_PROMPT_VERSION = "LEGACY"
+VERSION = "3.2-selftest-2026-06-17"
+COMP_PROMPT_VERSION = "3.2"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
 _UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
+_UPDATE_FILES  = ("server.py", "dashboard.html", "comp_prompt.md", "comp_report.html")
+_SELFTEST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".ovlp_selftest_state.json")
 
 
-def _auto_update():
-    """On startup: check for a newer version — LAN first, GitHub fallback.
-    If newer version found, replace local files and restart."""
-    this_dir = os.path.dirname(os.path.abspath(__file__))
+def _local_ip():
+    try:
+        import socket as _sock
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return ""
 
-    # Try LAN first (fast, always current), then GitHub (works from home)
-    sources = [
-        ("lan",    _UPDATE_LAN + "/update/version", _UPDATE_LAN + "/update"),
-        ("github", _UPDATE_GITHUB + "/server.py",   _UPDATE_GITHUB),
+def _is_canonical_server():
+    return _local_ip() == "192.168.0.103"
+
+def _sha256_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+def _sha256_file(path):
+    with open(path, "rb") as f:
+        return _sha256_bytes(f.read())
+
+def _read_selftest_state():
+    try:
+        with open(_SELFTEST_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _write_selftest_state(state):
+    try:
+        with open(_SELFTEST_FILE, "w") as f:
+            json.dump(state, f, indent=2, sort_keys=True)
+    except Exception as e:
+        print(f"[self-test] state write failed: {e}")
+
+def _fetch_update_file(base_url, fname, timeout=20):
+    url = f"{base_url}/{fname}"
+    ctx = _ssl() if url.startswith("https://") else None
+    if ctx:
+        return urllib.request.urlopen(url, timeout=timeout, context=ctx).read()
+    return urllib.request.urlopen(url, timeout=timeout).read()
+
+def _update_sources():
+    # GitHub repo is the canonical daily check. LAN remains a practical fallback
+    # for reps when GitHub is temporarily unavailable but MacMe is reachable.
+    return [
+        ("github", _UPDATE_GITHUB),
+        ("lan", _UPDATE_LAN + "/update"),
     ]
 
-    for label, check_url, base_url in sources:
-        try:
-            if label == "lan":
-                resp = urllib.request.urlopen(check_url, timeout=3)
-                remote = json.loads(resp.read()).get("version", "")
-                if not remote or remote == VERSION:
-                    return   # LAN reachable, already up to date
-                print(f"[update] v{remote} available via LAN (current {VERSION}) — updating...")
-            else:
-                # GitHub: parse VERSION from raw server.py header
-                resp = urllib.request.urlopen(check_url, timeout=10, context=_ssl())
-                first_chunk = resp.read(500).decode("utf-8", errors="replace")
-                import re as _re
-                m = _re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', first_chunk)
-                remote = m.group(1) if m else ""
-                if not remote or remote == VERSION:
-                    print(f"[update] GitHub v{remote} matches local v{VERSION} — skipping")
-                    return
-                print(f"[update] v{remote} available via GitHub (current {VERSION}) — updating...")
+def _run_self_test(force=False, apply_update=False):
+    """Compare local POP files against the repo/update source once per day.
 
-            for fname in ("server.py", "dashboard.html", "comp_prompt.md", "comp_report.html"):
-                url = f"{base_url}/{fname}"
-                ctx = _ssl() if "github" in base_url else None
-                data = urllib.request.urlopen(url, timeout=20, context=ctx).read() if ctx else urllib.request.urlopen(url, timeout=20).read()
+    When apply_update=True and this is not the canonical MacMe server, replace
+    mismatched files and restart. The result is persisted for /self-test.
+    """
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    today = time.strftime("%Y-%m-%d")
+    state = _read_selftest_state()
+    if not force and state.get("date") == today:
+        print(f"[self-test] already checked today via {state.get('source', 'unknown')} status={state.get('status')}")
+        return state
+
+    result = {
+        "date": today,
+        "ts": time.time(),
+        "version": VERSION,
+        "comp_prompt_version": COMP_PROMPT_VERSION,
+        "host_ip": _local_ip(),
+        "canonical": _is_canonical_server(),
+        "apply_update": bool(apply_update),
+        "status": "error",
+        "source": "",
+        "files": {},
+        "errors": [],
+    }
+
+    for label, base_url in _update_sources():
+        try:
+            remote_files = {}
+            mismatches = []
+            remote_version = ""
+
+            for fname in _UPDATE_FILES:
+                data = _fetch_update_file(base_url, fname)
+                remote_files[fname] = data
                 dest = os.path.join(this_dir, fname)
-                with open(dest + ".new", "wb") as f:
-                    f.write(data)
-                os.replace(dest + ".new", dest)
-                print(f"[update] ✓ {fname}")
-            print("[update] Restarting with updated files...")
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+                local_hash = _sha256_file(dest) if os.path.exists(dest) else ""
+                remote_hash = _sha256_bytes(data)
+                if fname == "server.py":
+                    first_chunk = data[:800].decode("utf-8", errors="replace")
+                    m = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', first_chunk)
+                    remote_version = m.group(1) if m else ""
+                result["files"][fname] = {
+                    "local": local_hash,
+                    "remote": remote_hash,
+                    "match": local_hash == remote_hash,
+                }
+                if local_hash != remote_hash:
+                    mismatches.append(fname)
+
+            result["source"] = label
+            result["remote_version"] = remote_version
+            result["mismatches"] = mismatches
+
+            if not mismatches:
+                result["status"] = "ok"
+                print(f"[self-test] OK against {label} v{remote_version or 'unknown'}")
+                _write_selftest_state(result)
+                return result
+
+            if apply_update and not _is_canonical_server():
+                print(f"[self-test] {len(mismatches)} mismatches via {label}; updating {', '.join(mismatches)}")
+                for fname, data in remote_files.items():
+                    dest = os.path.join(this_dir, fname)
+                    with open(dest + ".new", "wb") as f:
+                        f.write(data)
+                    os.replace(dest + ".new", dest)
+                    print(f"[self-test] updated {fname}")
+                result["status"] = "updated"
+                _write_selftest_state(result)
+                print("[self-test] restarting after update")
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+
+            result["status"] = "outdated"
+            print(f"[self-test] OUTDATED against {label}: {', '.join(mismatches)}")
+            _write_selftest_state(result)
+            return result
         except Exception as e:
-            print(f"[update] {label} failed: {e}")
+            msg = f"{label}: {e}"
+            result["errors"].append(msg)
+            print(f"[self-test] {msg}")
             continue  # Try next source
+
+    _write_selftest_state(result)
+    return result
+
+def _auto_update():
+    """Backward-compatible startup hook. Now rate-limited to once per day."""
+    return _run_self_test(force=False, apply_update=True)
 
 # ─────────────────────────────────────────────
 # CONFIG  (ovlp_config.json in same folder)
@@ -2238,6 +2335,14 @@ def _dash_build():
 @app.route("/ping")
 def ping(): return jsonify({"status":"running","apis":13,"time":time.time(),"build":_dash_build()})
 
+@app.route("/self-test")
+def self_test():
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    apply_update = request.args.get("apply", "").lower() in ("1", "true", "yes")
+    if apply_update and _is_canonical_server():
+        apply_update = False
+    return jsonify(_run_self_test(force=force, apply_update=apply_update))
+
 @app.route("/debug/last-contact")
 def debug_last_contact():
     slug = request.args.get("agent", "broadcast")
@@ -2317,6 +2422,161 @@ def recent():
     return jsonify(history)
 
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# PIPELINE MANAGEMENT ROUTES
+# ─────────────────────────────────────────────
+
+@app.route("/pipeline/stages")
+def pipeline_stages():
+    """Return all pipelines + stage names/IDs for this location."""
+    loc = _load_cfg().get("ghl_location_id", "")
+    url = f"https://services.leadconnectorhq.com/opportunities/pipelines?locationId={loc}"
+    try:
+        data = http_get(url, timeout=10, headers=_ghl_headers())
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/pipeline/contacts")
+def pipeline_contacts():
+    """Paginate all opportunities/contacts with stage info.
+    Optional filters: ?stage=In+Play  ?agent=kelhen  ?pipeline_id=xxx
+    """
+    stage_filter  = request.args.get("stage", "").lower().strip()
+    agent_filter  = request.args.get("agent", "").lower().strip()
+    pipeline_id   = request.args.get("pipeline_id", "").strip()
+    loc = _load_cfg().get("ghl_location_id", "")
+
+    results = []
+    page = 1
+    while True:
+        params = f"location_id={loc}&limit=100&page={page}"
+        if pipeline_id:
+            params += f"&pipeline_id={pipeline_id}"
+        url = f"https://services.leadconnectorhq.com/opportunities/search?{params}"
+        try:
+            data = http_get(url, timeout=20, headers=_ghl_headers())
+        except Exception as e:
+            return jsonify({"error": str(e), "collected": len(results)}), 500
+
+        opps = data.get("opportunities", [])
+        if not opps:
+            break
+
+        for opp in opps:
+            contact    = opp.get("contact", {}) or {}
+            stage_name = (opp.get("pipelineStage") or {}).get("name", "") or opp.get("status", "")
+            assigned   = ""
+            au = opp.get("assignedTo")
+            if isinstance(au, dict):
+                assigned = au.get("name", "") or au.get("firstName", "")
+            elif isinstance(au, str):
+                assigned = au
+
+            if stage_filter and stage_filter not in stage_name.lower():
+                continue
+            if agent_filter and agent_filter not in assigned.lower():
+                continue
+
+            results.append({
+                "opp_id":      opp.get("id"),
+                "contact_id":  contact.get("id"),
+                "name":        contact.get("name") or f"{contact.get('firstName','')} {contact.get('lastName','')}".strip(),
+                "phone":       contact.get("phone"),
+                "email":       contact.get("email"),
+                "stage":       stage_name,
+                "stage_id":    opp.get("pipelineStageId"),
+                "pipeline_id": opp.get("pipelineId"),
+                "agent":       assigned,
+                "tags":        contact.get("tags", []),
+                "last_activity": opp.get("lastActivityAt"),
+                "created_at":  opp.get("createdAt"),
+            })
+
+        meta = data.get("meta", {})
+        total = meta.get("total", 0)
+        if len(results) >= total or not opps or len(opps) < 100:
+            break
+        page += 1
+
+    return jsonify({"contacts": results, "total": len(results)})
+
+@app.route("/pipeline/update-tags", methods=["POST"])
+def pipeline_update_tags():
+    """Add and/or remove tags on one or more contacts.
+    Body: {"contact_ids": [...], "add": ["tag1"], "remove": ["tag2"]}
+    """
+    body = request.get_json(force=True) or {}
+    contact_ids = body.get("contact_ids", [])
+    add_tags    = body.get("add", [])
+    remove_tags = set(body.get("remove", []))
+
+    if not contact_ids:
+        return jsonify({"error": "contact_ids required"}), 400
+
+    moved, errors = [], []
+    for cid in contact_ids:
+        # Fetch current contact to get existing tags
+        url = f"https://services.leadconnectorhq.com/contacts/{cid}"
+        raw, err = fetch_ghl_contact(cid)
+        if raw is None:
+            errors.append({"contact_id": cid, "error": err})
+            continue
+
+        existing = set(raw.get("tags", []))
+        updated  = (existing - remove_tags) | set(add_tags)
+
+        # PUT updated tags back — use curl to bypass Cloudflare TLS fingerprint block on writes
+        import subprocess as _sp
+        put = _sp.run([
+            "curl", "-s", "-X", "PUT",
+            f"https://services.leadconnectorhq.com/contacts/{cid}",
+            "-H", f"Authorization: Bearer {_ghl_key()}",
+            "-H", "Version: 2021-07-28",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({"tags": list(updated)})
+        ], capture_output=True, text=True, timeout=10)
+        try:
+            res = json.loads(put.stdout)
+            if res.get("succeeded") or res.get("succeded"):
+                moved.append({"contact_id": cid, "tags": list(updated)})
+            else:
+                errors.append({"contact_id": cid, "error": put.stdout[:200]})
+        except Exception as e:
+            errors.append({"contact_id": cid, "error": f"PUT parse: {e}"})
+
+    return jsonify({"updated": moved, "errors": errors, "updated_count": len(moved), "error_count": len(errors)})
+
+@app.route("/pipeline/move", methods=["POST"])
+def pipeline_move():
+    """Bulk-move opportunities to a new stage.
+    Body: {"opp_ids": ["id1","id2",...], "stage_id": "...", "pipeline_id": "..."}
+    Returns per-opp results.
+    """
+    body = request.get_json(force=True) or {}
+    opp_ids     = body.get("opp_ids", [])
+    stage_id    = body.get("stage_id", "")
+    pipeline_id = body.get("pipeline_id", "")
+
+    if not opp_ids or not stage_id:
+        return jsonify({"error": "opp_ids and stage_id required"}), 400
+
+    moved, errors = [], []
+    for opp_id in opp_ids:
+        url     = f"https://services.leadconnectorhq.com/opportunities/{opp_id}"
+        payload = json.dumps({"pipelineStageId": stage_id, "pipelineId": pipeline_id}).encode()
+        h = {**_ghl_headers(), "Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=payload, headers=h, method="PUT")
+        try:
+            with urllib.request.urlopen(req, timeout=10, context=_ssl()) as r:
+                moved.append(opp_id)
+        except urllib.error.HTTPError as e:
+            errors.append({"opp_id": opp_id, "error": f"HTTP {e.code}: {e.read().decode()[:200]}"})
+        except Exception as e:
+            errors.append({"opp_id": opp_id, "error": str(e)})
+
+    return jsonify({"moved": moved, "errors": errors, "moved_count": len(moved), "error_count": len(errors)})
+
 # AUTO-UPDATE ROUTES  (Richard's machine serves these to staff)
 # ─────────────────────────────────────────────
 
@@ -2350,6 +2610,7 @@ fi
 curl -s "$BASE/server.py"      -o "$INSTALL_DIR/server.py"
 curl -s "$BASE/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
 curl -s "$BASE/comp_prompt.md" -o "$INSTALL_DIR/comp_prompt.md"
+curl -s "$BASE/comp_report.html" -o "$INSTALL_DIR/comp_report.html"
 lsof -ti:5050 | xargs kill -9 2>/dev/null; sleep 1
 cd "$INSTALL_DIR" && nohup python3 server.py >> server.log 2>&1 &
 sleep 3
@@ -2371,6 +2632,11 @@ def update_dashboard_html():
 def update_comp_prompt():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "comp_prompt.md",
                                mimetype="text/plain")
+
+@app.route("/update/comp_report.html")
+def update_comp_report_html():
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "comp_report.html",
+                               mimetype="text/html")
 
 @app.route("/comp-report")
 def comp_report_page():
@@ -2417,20 +2683,14 @@ def comp_prompt_page():
     return page, 200, {"Content-Type": "text/html"}
 
 if __name__ == "__main__":
-    # Skip auto-update on the canonical server (192.168.0.103) — this IS the source.
-    # Employee machines auto-update from here or GitHub on every boot.
-    import socket as _sock
-    try:
-        s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        local_ip = ""
-    if local_ip != "192.168.0.103":
-        _auto_update()
+    # Once per calendar day at first startup:
+    # - MacMe canonical server checks GitHub/LAN and records status only.
+    # - Staff machines check and auto-replace mismatched build files.
+    if _is_canonical_server():
+        print("[self-test] canonical server — check only")
+        _run_self_test(force=False, apply_update=False)
     else:
-        print("[update] canonical server — skipping self-update")
+        _auto_update()
     _pop_history.extend(_load_pop_history())
     # Build phone index in background so startup isn't blocked
     threading.Thread(target=_build_phone_index, daemon=True).start()
@@ -2453,4 +2713,3 @@ if __name__ == "__main__":
     else:
         print("  WARNING: no cert found, running HTTP\n")
     app.run(host="0.0.0.0", port=5050, debug=False, threaded=True, ssl_context=ssl_ctx)
-

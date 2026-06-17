@@ -129,12 +129,16 @@ mkdir -p "$INSTALL_DIR"
 
 curl -fsSL "${REPO_RAW}/server.py"      -o "$INSTALL_DIR/server.py"
 curl -fsSL "${REPO_RAW}/dashboard.html" -o "$INSTALL_DIR/dashboard.html"
+curl -fsSL "${REPO_RAW}/comp_prompt.md" -o "$INSTALL_DIR/comp_prompt.md"
+curl -fsSL "${REPO_RAW}/comp_report.html" -o "$INSTALL_DIR/comp_report.html"
 
 # Remove quarantine flag just in case (belt and suspenders)
 xattr -dr com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
 
 echo "  ✓ server.py downloaded"
 echo "  ✓ dashboard.html downloaded"
+echo "  ✓ comp_prompt.md downloaded"
+echo "  ✓ comp_report.html downloaded"
 
 # ── Write config ──────────────────────────────────────────
 cat > "$INSTALL_DIR/ovlp_config.json" << EOF
