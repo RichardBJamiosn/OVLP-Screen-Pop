@@ -437,6 +437,8 @@ def fetch_ghl_contact(contact_id):
         raw   = {
             "full_name":        f"{first} {last}".strip(),
             "address1":         c.get("address1", ""),
+            "city":             c.get("city", ""),
+            "state":            c.get("state", ""),
             "postalCode":       zip_code,
             "assignedToName":   c.get("assignedToName", "") or c.get("assignedTo", ""),
             "Absentee Owner":   absentee_str,
@@ -1273,6 +1275,7 @@ def get_comps(lat, lon, acreage, contact_comps=None):
 
         results = []
         subject_acres = float(acreage) if acreage else 0
+        tiny_lot = subject_acres > 0 and subject_acres < 0.1
         skip_basic = skip_classcd = skip_ratio = 0
         # Full scan for diagnostics — see distribution across all 50 raw features
         classcd_counts = {}
@@ -1290,7 +1293,6 @@ def get_comps(lat, lon, acreage, contact_comps=None):
             sale_ts = a.get("SALEDATE")  # epoch ms from response
             classcd = str(a.get("CLASSCD") or "")
             # Tiny lot mode: relax acre floor for sub-0.1 acre subjects
-            tiny_lot = subject_acres > 0 and subject_acres < 0.1
             acre_floor = 0.01 if tiny_lot else 0.05
             if not address or price < 500 or acres < acre_floor:
                 skip_basic += 1; continue
@@ -1683,6 +1685,9 @@ def build_contact(raw):
         "owner_name":       raw.get("full_name") or cf.get("owner_name") or raw.get("Owner Name",""),
         "owner_address":    raw.get("address1")  or cf.get("owner_address") or raw.get("Owner Mailing Address",""),
         "property_address": cf.get("property_address") or raw.get("Property Address",""),
+        "property_city":    cf.get("property_city") or raw.get("Property City") or raw.get("city",""),
+        "property_state":   cf.get("property_state") or raw.get("Property State") or raw.get("state","OH") or "OH",
+        "county":           cf.get("county") or raw.get("County",""),
         "zip_code":         raw.get("postalCode") or cf.get("zip_code") or raw.get("ZIP Code",""),
         "acreage":          cf.get("acreage")    or raw.get("Acreage",""),
         "market_value":     _ohio_true_value(cf.get("total_market_value") or raw.get("Total Market Value","")),
@@ -1710,6 +1715,24 @@ def build_contact(raw):
              "date":raw.get("Comp 3 Sale Date",""),"price":raw.get("Comp 3 Sale Price",""),"per_acre":raw.get("Comp 3 $/Acre","")},
         ]
     }
+
+def _contact_city_state(contact):
+    """Build a geocode suffix without assuming every POP lead is Columbus."""
+    city = str(contact.get("property_city") or "").strip()
+    state = str(contact.get("property_state") or "OH").strip() or "OH"
+    zip_code = str(contact.get("zip_code") or "").strip()
+    county = str(contact.get("county") or "").strip().lower()
+
+    if city:
+        suffix = f"{city} {state}"
+    elif zip_code.startswith(("440", "441", "442")) or "geauga" in county:
+        suffix = "Geauga County OH"
+    else:
+        suffix = "Columbus OH"
+
+    if zip_code:
+        suffix = f"{suffix} {zip_code}"
+    return suffix
 
 # ─────────────────────────────────────────────
 # ROUTES
@@ -1823,7 +1846,7 @@ def _enrich_and_push(contact):
         push({"type": "enrich_done", "data": {}})
         return
 
-    city     = f"Columbus OH {contact.get('zip_code','43215')}"
+    city     = _contact_city_state(contact)
     zip_code = contact.get("zip_code", "43215")
 
     # ── 2. Check cache — skip all API calls if same parcel seen today ────────
