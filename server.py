@@ -52,6 +52,8 @@ def _write_selftest_state(state):
 
 def _fetch_update_file(base_url, fname, timeout=20):
     url = f"{base_url}/{fname}"
+    if base_url.startswith("https://raw.githubusercontent.com/"):
+        url += f"?ovlp_selftest={int(time.time())}"
     ctx = _ssl() if url.startswith("https://") else None
     if ctx:
         return urllib.request.urlopen(url, timeout=timeout, context=ctx).read()
