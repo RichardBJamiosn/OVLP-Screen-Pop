@@ -11,6 +11,8 @@ COMP_PROMPT_VERSION = "3.2"
 # Update sources: LAN (office) checked first, GitHub fallback for remote staff
 _UPDATE_LAN    = "http://192.168.0.103:5050"
 _UPDATE_GITHUB = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop/main"
+_GITHUB_API_MAIN = "https://api.github.com/repos/RichardBJamiosn/OVLP-Screen-Pop/commits/main"
+_GITHUB_RAW_BASE = "https://raw.githubusercontent.com/RichardBJamiosn/OVLP-Screen-Pop"
 _UPDATE_FILES  = ("server.py", "dashboard.html", "comp_prompt.md", "comp_report.html")
 _SELFTEST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".ovlp_selftest_state.json")
 
@@ -60,10 +62,24 @@ def _fetch_update_file(base_url, fname, timeout=20):
     return urllib.request.urlopen(url, timeout=timeout).read()
 
 def _update_sources():
+    # Resolve GitHub main through the API, then fetch immutable raw commit URLs.
+    # Branch raw can lag behind after pushes because of CDN caching.
+    github_base = _UPDATE_GITHUB
+    github_sha = ""
+    try:
+        req = urllib.request.Request(_GITHUB_API_MAIN, headers={"User-Agent": "OVLP-ScreenPop/1.0"})
+        with urllib.request.urlopen(req, timeout=10, context=_ssl()) as r:
+            data = json.loads(r.read())
+        github_sha = data.get("sha", "")
+        if github_sha:
+            github_base = f"{_GITHUB_RAW_BASE}/{github_sha}"
+    except Exception as e:
+        print(f"[self-test] github sha resolve failed: {e}")
+
     # GitHub repo is the canonical daily check. LAN remains a practical fallback
     # for reps when GitHub is temporarily unavailable but MacMe is reachable.
     return [
-        ("github", _UPDATE_GITHUB),
+        ("github", github_base),
         ("lan", _UPDATE_LAN + "/update"),
     ]
 
